@@ -22,7 +22,9 @@ def upgrade() -> None:
         sa.Column("output_tokens", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
-    op.create_index("ix_agent_execution_metrics_organization_id", "agent_execution_metrics", ["organization_id"])
+    op.create_index(
+        "ix_agent_execution_metrics_organization_id", "agent_execution_metrics", ["organization_id"]
+    )
     op.create_index("ix_agent_execution_metrics_run_id", "agent_execution_metrics", ["run_id"])
     op.create_index("ix_agent_execution_metrics_agent_id", "agent_execution_metrics", ["agent_id"])
     op.create_index("ix_agent_execution_metrics_status", "agent_execution_metrics", ["status"])

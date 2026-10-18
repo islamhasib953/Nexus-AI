@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 from app.core.config import Settings
 from app.main import create_app
 from app.security.policy import PolicyEngine, RiskCategory
@@ -70,3 +71,19 @@ def test_customer_action_is_denied_and_approval_can_be_cancelled(tmp_path: Path)
         cancelled = client.post(f"/api/v1/approvals/{approval_id}/cancel", headers=customer)
         assert cancelled.status_code == 200
         assert cancelled.json()["status"] == "cancelled"
+
+
+def test_development_auth_is_not_available_outside_development(tmp_path: Path) -> None:
+    settings = Settings(
+        app_env="staging",
+        dev_auth_enabled=False,
+        database_url=f"sqlite:///{tmp_path / 'staging.db'}",
+    )
+    with TestClient(create_app(settings)) as client:
+        response = client.get("/api/v1/me", headers={"Authorization": "Bearer anything"})
+        assert response.status_code == 503
+
+
+def test_production_settings_require_identity_provider_and_real_embeddings() -> None:
+    with pytest.raises(ValueError, match="identity provider"):
+        Settings(app_env="production", dev_auth_enabled=False, embedding_provider="openai")

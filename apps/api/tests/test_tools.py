@@ -1,10 +1,14 @@
+import json
 from pathlib import Path
 from time import sleep
 
+import httpx
+import pytest
 from app.core.auth import Principal
 from app.core.config import Settings
 from app.main import create_app
 from app.tools.contracts import ToolCall
+from app.tools.mcp import RemoteMCPClient, RemoteMCPError
 from app.tools.registry import ToolDefinition, ToolRegistry
 from app.tools.service import ToolExecutionService
 from fastapi.testclient import TestClient
@@ -113,3 +117,81 @@ def test_tool_timeout_is_bounded(tmp_path: Path) -> None:
         )
         assert result.status == "failed"
         assert result.error_code == "tool_timeout"
+
+
+def test_remote_mcp_json_rpc_transport_validates_envelope_and_result() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.read())
+        assert body["method"] == "tools/call"
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": "remote-123",
+                "result": {"structuredContent": {"ticket_id": "T-1"}},
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport) as client:
+        result = RemoteMCPClient("https://mcp.test", client=client).call(
+            ToolCall(
+                tool_id="support.create_ticket",
+                arguments={"title": "Login", "description": "Blocked"},
+                idempotency_key="remote-123",
+            )
+        )
+    assert result.status == "completed"
+    assert result.result == {"content": {"ticket_id": "T-1"}}
+    assert result.verified is False
+
+
+def test_remote_mcp_transport_fails_closed_when_unconfigured_or_malformed() -> None:
+    call = ToolCall(tool_id="support.create_ticket", idempotency_key="remote-456")
+    with pytest.raises(RemoteMCPError, match="not configured"):
+        RemoteMCPClient().call(call)
+
+    def malformed(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": "other"})
+
+    with httpx.Client(transport=httpx.MockTransport(malformed)) as client:
+        with pytest.raises(RemoteMCPError, match="invalid JSON-RPC envelope"):
+            RemoteMCPClient("https://mcp.test", client=client).call(call)
+
+
+def test_tool_results_are_redacted_and_idempotency_is_tenant_scoped(tmp_path: Path) -> None:
+    class SensitiveAdapter:
+        def draft(self, arguments):
+            return {"ticket_id": "T-2", "api_token": "do-not-store"}
+
+        execute = draft
+
+        def verify(self, result):
+            return True
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            "safe.test",
+            "test tool",
+            {"required": []},
+            frozenset({"internal"}),
+            frozenset({"internal_member"}),
+            False,
+            SensitiveAdapter(),
+        )
+    )
+    service = ToolExecutionService(registry)
+    app = create_app(Settings(database_url=f"sqlite:///{tmp_path / 'redaction.db'}"))
+    app.state.database.create_schema()
+    call_value = ToolCall(tool_id="safe.test", idempotency_key="tenant-key-123", mode="execute")
+    with app.state.database.session_factory() as db:
+        first = service.execute(
+            db, Principal("u1", "org-1", "internal_member", "internal"), call_value
+        )
+        db.commit()
+        assert first.result["api_token"] == "[REDACTED]"
+        other_tenant = service.execute(
+            db, Principal("u2", "org-2", "internal_member", "internal"), call_value
+        )
+        assert other_tenant.status == "completed"

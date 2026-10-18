@@ -1,7 +1,10 @@
 from pathlib import Path
 
+import httpx
+import pytest
 from app.core.config import Settings
 from app.main import create_app
+from app.rag.embeddings import OpenAICompatibleEmbeddingModel
 from fastapi.testclient import TestClient
 
 
@@ -105,3 +108,28 @@ def test_versioning_creates_new_version_without_exposing_deleted_content(tmp_pat
         ).json()
         assert result["supported"] is True
         assert all(first["id"] != item["document_id"] for item in result["citations"])
+
+
+def test_configured_embedding_provider_normalizes_and_validates_dimensions() -> None:
+    def valid(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": [{"embedding": [3.0, 4.0]}]})
+
+    with httpx.Client(transport=httpx.MockTransport(valid)) as client:
+        model = OpenAICompatibleEmbeddingModel(
+            "https://embed.test/v1",
+            "free-local-model",
+            2,
+            client=client,
+        )
+        vector = model.embed("hello")
+    assert vector == [0.6, 0.8]
+
+    with pytest.raises(ValueError, match="not allowed in production"):
+        Settings(
+            app_env="production",
+            dev_auth_enabled=False,
+            identity_provider="oidc",
+            identity_issuer_url="https://issuer.test",
+            identity_audience="nexus",
+            embedding_provider="hash",
+        )

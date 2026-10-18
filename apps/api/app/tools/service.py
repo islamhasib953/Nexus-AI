@@ -15,6 +15,21 @@ from app.tools.contracts import ToolCall, ToolResult
 from app.tools.mcp import LocalMCPServer
 from app.tools.registry import ToolRegistry
 
+SENSITIVE_KEY_MARKERS = ("secret", "token", "password", "api_key", "authorization")
+
+
+def redact_sensitive(value):
+    if isinstance(value, dict):
+        return {
+            key: "[REDACTED]"
+            if any(marker in key.lower() for marker in SENSITIVE_KEY_MARKERS)
+            else redact_sensitive(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [redact_sensitive(item) for item in value]
+    return value
+
 
 class ToolExecutionService:
     def __init__(self, registry: ToolRegistry) -> None:
@@ -27,13 +42,16 @@ class ToolExecutionService:
         self, db: Session, principal: Principal, call: ToolCall, run_id: str | None = None
     ) -> ToolResult:
         existing = db.scalar(
-            select(ToolExecution).where(ToolExecution.idempotency_key == call.idempotency_key)
+            select(ToolExecution).where(
+                ToolExecution.idempotency_key == call.idempotency_key,
+                ToolExecution.organization_id == principal.organization_id,
+            )
         )
         if existing is not None:
             return ToolResult(
                 tool_id=existing.tool_id,
                 status="replayed",
-                result=json.loads(existing.result_json),
+                result=redact_sensitive(json.loads(existing.result_json)),
                 provider_reference=existing.provider_reference,
                 error_code=existing.error_code,
                 verified=existing.status == "completed",
@@ -105,11 +123,12 @@ class ToolExecutionService:
                 result = self._invoke(
                     tool.adapter.draft, call.arguments, call.timeout_seconds, tool.max_retries
                 )
-                record.result_json = json.dumps(result)
+                safe_result = redact_sensitive(result)
+                record.result_json = json.dumps(safe_result)
                 record.completed_at = datetime.now(UTC)
                 db.flush()
                 return ToolResult(
-                    tool_id=call.tool_id, status="draft", result=result, verified=False
+                    tool_id=call.tool_id, status="draft", result=safe_result, verified=False
                 )
             result = self._invoke(
                 tool.adapter.execute, call.arguments, call.timeout_seconds, tool.max_retries
@@ -118,14 +137,15 @@ class ToolExecutionService:
             if not verified:
                 raise RuntimeError("provider_result_unverified")
             record.status = "completed"
-            record.result_json = json.dumps(result)
+            safe_result = redact_sensitive(result)
+            record.result_json = json.dumps(safe_result)
             record.provider_reference = str(result.get("ticket_id", "")) or None
             record.completed_at = datetime.now(UTC)
             db.flush()
             return ToolResult(
                 tool_id=call.tool_id,
                 status="completed",
-                result=result,
+                result=safe_result,
                 provider_reference=record.provider_reference,
                 verified=True,
             )

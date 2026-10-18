@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import AnyHttpUrl, Field
+from pydantic import AnyHttpUrl, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_name: str = "nexus-ai-api"
     app_version: str = "0.1.0"
+    identity_provider: str = "development"
+    identity_issuer_url: str = ""
+    identity_audience: str = ""
     log_level: str = "INFO"
     api_host: str = "0.0.0.0"
     api_port: int = Field(default=8000, ge=1, le=65535)
@@ -39,6 +42,11 @@ class Settings(BaseSettings):
     rag_chunk_size: int = Field(default=900, ge=200, le=4000)
     rag_default_top_k: int = Field(default=5, ge=1, le=20)
     rag_min_score: float = Field(default=0.12, ge=-1, le=1)
+    embedding_provider: str = "hash"
+    embedding_model_id: str = "hash-embedding-v1"
+    embedding_base_url: str = ""
+    embedding_api_key: str = ""
+    embedding_dimensions: int = Field(default=128, ge=8, le=4096)
     observability_enabled: bool = True
     metrics_window_hours: int = Field(default=24, ge=1, le=720)
     ops_queue_warning_threshold: int = Field(default=10, ge=1, le=10000)
@@ -55,6 +63,21 @@ class Settings(BaseSettings):
         extra="ignore",
         case_sensitive=False,
     )
+
+    @model_validator(mode="after")
+    def validate_production_boundaries(self) -> "Settings":
+        if self.app_env.lower() == "production":
+            if self.dev_auth_enabled:
+                raise ValueError("Development authentication must be disabled in production.")
+            if self.identity_provider == "development":
+                raise ValueError("A production identity provider must be configured.")
+            if not self.identity_issuer_url or not self.identity_audience:
+                raise ValueError("Production identity issuer and audience are required.")
+            if self.embedding_provider == "hash":
+                raise ValueError("Hash embeddings are not allowed in production.")
+        if self.embedding_provider != "hash" and not self.embedding_base_url:
+            raise ValueError("A base URL is required for the configured embedding provider.")
+        return self
 
 
 @lru_cache

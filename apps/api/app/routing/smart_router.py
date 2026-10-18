@@ -136,5 +136,7 @@ class SmartRequestRouter:
                 latency_ms=int((perf_counter() - started) * 1000),
                 input_tokens=result.input_tokens,
                 output_tokens=result.output_tokens,
+                confidence=decision.confidence,
+                explanation=decision.explanation,
             )
         )

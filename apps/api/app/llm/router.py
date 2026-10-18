@@ -75,12 +75,20 @@ class ModelRouter:
         failures: list[str] = []
         structured_error: StructuredOutputError | None = None
         for model_id in self._candidates():
-            model = self.registry.get(model_id)
+            try:
+                model = self.registry.get(model_id)
+            except ValueError as error:
+                failures.append(str(error))
+                continue
             if model.paid and not self.settings.llm_allow_paid_fallback:
                 failures.append(f"{model_id}: paid fallback is disabled")
                 continue
             if not self.health.available(model.provider):
                 failures.append(f"{model_id}: provider circuit is open")
+                continue
+            capability_error = self._validate_request(model_id, model, request)
+            if capability_error:
+                failures.append(f"{model_id}: {capability_error}")
                 continue
             estimated = self._estimate_cost(model_id, request.prompt, request.max_output_tokens)
             self._enforce_budget(db, organization_id, estimated)
@@ -106,6 +114,17 @@ class ModelRouter:
         raise ProviderUnavailableError(
             "No configured model provider is available: " + "; ".join(failures)
         )
+
+    @staticmethod
+    def _validate_request(model_id, model, request: CompletionRequest) -> str | None:
+        estimated_input = max(1, (len(request.prompt) + 3) // 4)
+        if estimated_input + request.max_output_tokens > model.context_window:
+            return "request exceeds model context window"
+        if request.structured_schema and not model.supports_structured_output:
+            return "structured output is not supported"
+        if request.max_output_tokens <= 0:
+            return "max output tokens must be positive"
+        return None
 
     def _candidates(self) -> tuple[str, ...]:
         fallbacks = tuple(

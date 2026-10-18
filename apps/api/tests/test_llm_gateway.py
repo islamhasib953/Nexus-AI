@@ -81,8 +81,8 @@ def test_unavailable_primary_falls_back_to_configured_model(tmp_path: Path) -> N
     )
     registry = ModelRegistry(
         (
-            ModelSpec("primary", "first", "first", 100, False),
-            ModelSpec("fallback", "second", "second", 100, False),
+            ModelSpec("primary", "first", "first", 1024, False),
+            ModelSpec("fallback", "second", "second", 1024, False),
         )
     )
     router = ModelRouter(
@@ -126,8 +126,8 @@ def test_paid_model_is_skipped_when_paid_fallback_is_disabled(tmp_path: Path) ->
     )
     registry = ModelRegistry(
         (
-            ModelSpec("paid", "paid", "paid", 100, False, paid=True),
-            ModelSpec("free", "free", "free", 100, False),
+            ModelSpec("paid", "paid", "paid", 1024, False, paid=True),
+            ModelSpec("free", "free", "free", 1024, False),
         )
     )
     router = ModelRouter(
@@ -147,7 +147,7 @@ def test_structured_response_must_include_required_fields(tmp_path: Path) -> Non
         database_url=f"sqlite:///{tmp_path / 'structured.db'}",
         llm_primary_model_id="fixed",
     )
-    registry = ModelRegistry((ModelSpec("fixed", "fixed", "fixed", 100, True),))
+    registry = ModelRegistry((ModelSpec("fixed", "fixed", "fixed", 1024, True),))
     router = ModelRouter(settings, registry, {"fixed": FixedProvider("not json")})
     app = create_app(settings)
     with TestClient(app) as client:
@@ -208,3 +208,44 @@ def test_unconfigured_provider_and_non_postgres_checkpointer_fail_safely() -> No
     with pytest.raises(ValueError, match="PostgreSQL"):
         with postgres_checkpointer("sqlite:///local.db"):
             pass
+
+
+def test_registry_exposes_authoritative_capabilities_and_rejects_duplicate_ids() -> None:
+    registry = ModelRegistry()
+    mock = registry.get("mock-chat")
+    assert "test_only" in mock.capabilities
+    assert registry.by_provider("ollama")[0].capabilities == ("chat", "structured_output", "local")
+    with pytest.raises(ValueError, match="unique"):
+        ModelRegistry((mock, mock))
+
+
+def test_router_skips_models_that_cannot_fit_context_or_structured_output(tmp_path: Path) -> None:
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'capabilities.db'}",
+        llm_primary_model_id="small",
+        llm_fallback_model_ids="structured",
+        llm_max_retries=0,
+    )
+    registry = ModelRegistry(
+        (
+            ModelSpec("small", "small", "small", 4, False),
+            ModelSpec("structured", "structured", "structured", 100, True),
+        )
+    )
+    router = ModelRouter(
+        settings,
+        registry,
+        {"small": FixedProvider("too small"), "structured": FixedProvider('{"answer":"ok"}')},
+    )
+    app = create_app(settings)
+    with TestClient(app) as client:
+        with client.app.state.database.session_factory.begin() as session:
+            result = router.complete(
+                session,
+                "tenant-a",
+                CompletionRequest(
+                    prompt="hello", max_output_tokens=10, structured_schema={"required": ["answer"]}
+                ),
+            )
+    assert result.model_id == "structured"
+    assert result.structured == {"answer": "ok"}

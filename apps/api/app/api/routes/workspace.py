@@ -3,7 +3,7 @@ import json
 from time import perf_counter
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.agents.contracts import AgentExecutionError, AgentRequest
 from app.agents.orchestrator import Orchestrator
 from app.core.auth import DEV_PROFILES, Principal, issue_token, require_principal
-from app.core.config import Settings, get_settings
+from app.core.config import Settings
 from app.llm.models import BudgetExceededError, ProviderUnavailableError
 from app.llm.router import ModelRouter
 from app.persistence.checkpoints import PostgresCheckpointStore
@@ -115,9 +115,8 @@ def encode_event(event: RunEvent) -> str:
 
 
 @router.post("/auth/dev/session")
-def create_development_session(
-    body: DevSessionRequest, settings: Settings = Depends(get_settings)
-) -> dict[str, object]:
+def create_development_session(body: DevSessionRequest, request: Request) -> dict[str, object]:
+    settings: Settings = request.app.state.settings
     principal = DEV_PROFILES[body.profile]
     token = issue_token(principal, settings)
     return {"access_token": token, "token_type": "bearer", "principal": principal.__dict__}
@@ -149,6 +148,8 @@ def list_agents(
                 "max_iterations": capability.max_iterations,
                 "supported_tasks": list(capability.supported_tasks),
                 "exclusions": list(capability.exclusions),
+                "implementation_status": capability.implementation_status,
+                "required_integrations": list(capability.required_integrations),
             }
             for capability in orchestrator.registry.all()
         ]
@@ -167,6 +168,11 @@ def list_models(
                 "provider": model.provider,
                 "context_window": model.context_window,
                 "supports_structured_output": model.supports_structured_output,
+                "supports_streaming": model.supports_streaming,
+                "supports_tools": model.supports_tools,
+                "supports_multimodal": model.supports_multimodal,
+                "requires_api_key": model.requires_api_key,
+                "capabilities": list(model.capabilities),
             }
             for model in model_router.registry.all()
         ]
@@ -292,6 +298,7 @@ def resume_run(
 async def stream_run(
     run_id: str,
     request: Request,
+    last_event_id: int | None = Header(default=None, alias="Last-Event-ID"),
     principal: Principal = Depends(require_principal),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
@@ -304,11 +311,21 @@ async def stream_run(
         ).all()
         for event in stored:
             emitted = event.sequence
-            yield encode_event(event)
-        if run.status == "queued":
-            transition_run(db, run, "running")
-            add_event(db, run, "status_changed", {"status": "running"})
-            db.commit()
+            if last_event_id is None or event.sequence > last_event_id:
+                yield encode_event(event)
+        db.expire_all()
+        current = db.get(Run, run.id)
+        if current is None or current.status in {"completed", "failed", "cancelled"}:
+            return
+        if current.status != "queued":
+            # A second consumer must not execute an already-running run again. The
+            # worker/request that owns the run will append the remaining events.
+            return
+        transition_run(db, current, "running")
+        status_event = add_event(db, current, "status_changed", {"status": "running"})
+        db.commit()
+        if last_event_id is None or status_event.sequence > last_event_id:
+            yield encode_event(status_event)
         prompt = db.scalar(
             select(Message.content)
             .where(Message.run_id == run.id, Message.role == "user")
@@ -344,7 +361,8 @@ async def stream_run(
                 )
                 event = add_event(db, current, "run_failed", {"reason": str(error)})
                 db.commit()
-                yield encode_event(event)
+                if last_event_id is None or event.sequence > last_event_id:
+                    yield encode_event(event)
             return
         for progress in agent_response.progress:
             progress_event = add_event(
@@ -355,7 +373,8 @@ async def stream_run(
             )
             db.commit()
             emitted = progress_event.sequence
-            yield encode_event(progress_event)
+            if last_event_id is None or progress_event.sequence > last_event_id:
+                yield encode_event(progress_event)
         db.add(
             AgentExecutionMetric(
                 organization_id=run.organization_id,
@@ -386,7 +405,8 @@ async def stream_run(
             )
             db.commit()
             emitted = event.sequence
-            yield encode_event(event)
+            if last_event_id is None or event.sequence > last_event_id:
+                yield encode_event(event)
             await asyncio.sleep(0.08)
             if await request.is_disconnected():
                 return
@@ -405,7 +425,8 @@ async def stream_run(
             transition_run(db, current, "completed")
             event = add_event(db, current, "run_completed", {"status": "completed"})
             db.commit()
-            yield encode_event(event)
+            if last_event_id is None or event.sequence > last_event_id:
+                yield encode_event(event)
         elif current is not None and current.status == "cancelled":
             events_after_cancel = db.scalars(
                 select(RunEvent)

@@ -7,14 +7,18 @@ from sqlalchemy.orm import Session
 
 from app.persistence.models import Document, DocumentChunk
 from app.rag.chunking import chunk_text, sanitize_for_retrieval
-from app.rag.embeddings import HashEmbeddingModel
+from app.rag.embeddings import EmbeddingModel, HashEmbeddingModel
 from app.rag.models import Citation, RetrievalResult, metadata
 from app.rag.vector_store import QdrantVectorStore, VectorPoint
 
 
 class DocumentService:
-    def __init__(self, qdrant: QdrantVectorStore | None = None) -> None:
-        self.embedder = HashEmbeddingModel()
+    def __init__(
+        self,
+        qdrant: QdrantVectorStore | None = None,
+        embedder: EmbeddingModel | None = None,
+    ) -> None:
+        self.embedder = embedder or HashEmbeddingModel()
         self.qdrant = qdrant or QdrantVectorStore()
 
     def ingest(

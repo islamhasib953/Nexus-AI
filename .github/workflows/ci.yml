@@ -25,6 +25,8 @@ jobs:
         run: uv run ruff format --check .
       - name: Backend tests
         run: uv run pytest
+      - name: Dependency vulnerability audit
+        run: uvx --from pip-audit==2.9.0 pip-audit --strict
 
   frontend:
     runs-on: ubuntu-latest
@@ -48,6 +50,8 @@ jobs:
         run: npm run test -- --run
       - name: Build
         run: npm run build
+      - name: Frontend dependency audit
+        run: npm audit --audit-level=high
 
   repository:
     runs-on: ubuntu-latest
@@ -56,3 +60,6 @@ jobs:
       - name: Validate repository contracts
         shell: pwsh
         run: ./scripts/validate-phase2.ps1
+      - name: Validate Phase 14 operational contracts
+        shell: pwsh
+        run: ./scripts/validate-phase14.ps1

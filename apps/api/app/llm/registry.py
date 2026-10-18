@@ -3,7 +3,10 @@ from app.llm.models import ModelSpec
 
 class ModelRegistry:
     def __init__(self, models: tuple[ModelSpec, ...] | None = None) -> None:
-        self._models = {model.id: model for model in models or default_models()}
+        configured = models or default_models()
+        if len({model.id for model in configured}) != len(configured):
+            raise ValueError("Model identifiers must be unique.")
+        self._models = {model.id: model for model in configured}
 
     def get(self, model_id: str) -> ModelSpec:
         try:
@@ -14,11 +17,46 @@ class ModelRegistry:
     def all(self) -> tuple[ModelSpec, ...]:
         return tuple(self._models.values())
 
+    def by_provider(self, provider: str) -> tuple[ModelSpec, ...]:
+        return tuple(model for model in self._models.values() if model.provider == provider)
+
 
 def default_models() -> tuple[ModelSpec, ...]:
     return (
-        ModelSpec("mock-chat", "mock", "mock-chat", 8192, True),
-        ModelSpec("groq-gpt-oss-20b", "groq", "openai/gpt-oss-20b", 131072, True),
-        ModelSpec("hf-qwen3", "huggingface", "Qwen/Qwen3-32B", 32768, True),
-        ModelSpec("ollama-qwen3", "ollama", "qwen3:8b", 32768, True),
+        ModelSpec(
+            "mock-chat",
+            "mock",
+            "mock-chat",
+            8192,
+            True,
+            supports_tools=False,
+            capabilities=("chat", "structured_output", "test_only"),
+        ),
+        ModelSpec(
+            "groq-gpt-oss-20b",
+            "groq",
+            "openai/gpt-oss-20b",
+            131072,
+            True,
+            supports_tools=True,
+            requires_api_key=True,
+            capabilities=("chat", "structured_output", "tools"),
+        ),
+        ModelSpec(
+            "hf-qwen3",
+            "huggingface",
+            "Qwen/Qwen3-32B",
+            32768,
+            True,
+            requires_api_key=True,
+            capabilities=("chat", "structured_output"),
+        ),
+        ModelSpec(
+            "ollama-qwen3",
+            "ollama",
+            "qwen3:8b",
+            32768,
+            True,
+            capabilities=("chat", "structured_output", "local"),
+        ),
     )

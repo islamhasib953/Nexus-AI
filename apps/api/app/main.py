@@ -26,6 +26,7 @@ from app.core.middleware import (
 )
 from app.llm.router import ModelRouter
 from app.persistence.database import Database
+from app.rag.embeddings import HashEmbeddingModel, OpenAICompatibleEmbeddingModel
 from app.rag.service import DocumentService
 from app.rag.vector_store import QdrantVectorStore
 from app.routing.smart_router import SmartRequestRouter
@@ -76,8 +77,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.database = Database(settings.database_url)
     application.state.model_router = ModelRouter(settings)
     application.state.smart_router = SmartRequestRouter(settings, application.state.model_router)
+    if settings.embedding_provider == "hash":
+        embedder = HashEmbeddingModel(settings.embedding_dimensions)
+    else:
+        embedder = OpenAICompatibleEmbeddingModel(
+            settings.embedding_base_url,
+            settings.embedding_model_id,
+            settings.embedding_dimensions,
+            settings.embedding_api_key,
+        )
     application.state.documents = DocumentService(
-        QdrantVectorStore(settings.qdrant_url, settings.qdrant_collection)
+        QdrantVectorStore(settings.qdrant_url, settings.qdrant_collection), embedder
     )
     application.state.orchestrator = Orchestrator(
         settings, application.state.smart_router, application.state.documents

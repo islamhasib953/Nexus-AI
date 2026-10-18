@@ -11,6 +11,8 @@ class AgentCapability:
     max_iterations: int
     supported_tasks: tuple[str, ...] = ()
     exclusions: tuple[str, ...] = ()
+    implementation_status: str = "bounded"
+    required_integrations: tuple[str, ...] = ()
 
 
 class AgentRegistry:
@@ -86,13 +88,16 @@ def default_capabilities() -> tuple[AgentCapability, ...]:
         ),
         AgentCapability(
             "crm",
-            "Assists internal users with authorized CRM knowledge and workflow guidance.",
+            "Provides bounded CRM knowledge and workflow guidance; live CRM access is not "
+            "configured.",
             frozenset({"internal"}),
             frozenset({"conversation", "approved_documents"}),
             frozenset({"support.create_ticket"}),
             2,
             ("CRM guidance", "account workflow explanation"),
             ("expose another tenant's customer data",),
+            "bounded",
+            ("crm",),
         ),
         AgentCapability(
             "customer-support",

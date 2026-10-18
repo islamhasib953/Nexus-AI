@@ -1,8 +1,10 @@
 from pathlib import Path
 
+import pytest
 from app.agents.contracts import AgentRequest
 from app.agents.orchestrator import Orchestrator
 from app.agents.registry import AgentRegistry
+from app.agents.specialized import AnalyticsAgent
 from app.core.config import Settings
 from app.main import create_app
 from app.persistence.models import RunEvent
@@ -27,6 +29,9 @@ def test_registry_exposes_capabilities_and_workspace_permissions(tmp_path: Path)
         assert response.status_code == 200
         ids = {item["id"] for item in response.json()["items"]}
         assert {"orchestrator", "knowledge-research", "analytics", "general"} <= ids
+        crm = next(item for item in response.json()["items"] if item["id"] == "crm")
+        assert crm["implementation_status"] == "bounded"
+        assert crm["required_integrations"] == ["crm"]
         registry = AgentRegistry()
         registry.authorize("analytics", "internal")
         try:
@@ -134,3 +139,51 @@ def test_customer_support_agent_is_failure_safe_without_evidence(tmp_path: Path)
         stream = client.get(run["events_url"], headers=headers)
         assert "customer-support" in stream.text
         assert "No authorized source" in stream.text
+        assert "no approved external system integration" in stream.text
+
+
+def test_analytics_rejects_multiple_or_unbounded_expressions() -> None:
+    agent = AnalyticsAgent()
+    request = AgentRequest(
+        prompt="calculate 1 + 2 and 3 + 4",
+        organization_id="org-internal",
+        user_id="user-internal",
+        workspace="internal",
+        conversation_id="conversation",
+        run_id="run",
+    )
+    with pytest.raises(ValueError, match="one bounded"):
+        agent.execute(None, request, None)
+
+    request.prompt = "calculate 1000000000001 + 1"
+    with pytest.raises(ValueError, match="bounded calculation limit"):
+        agent.execute(None, request, None)
+
+
+def test_completed_run_replays_without_duplicate_execution_and_supports_sse_resume(
+    tmp_path: Path,
+) -> None:
+    with make_client(tmp_path) as client:
+        headers = auth(client, "internal")
+        conversation = client.post("/api/v1/conversations", headers=headers, json={}).json()
+        run = client.post(
+            f"/api/v1/conversations/{conversation['id']}/runs",
+            headers=headers,
+            json={"content": "calculate 2 + 2"},
+        ).json()
+        first = client.get(run["events_url"], headers=headers)
+        assert first.status_code == 200
+        event_ids = [
+            int(line.removeprefix("id: "))
+            for line in first.text.splitlines()
+            if line.startswith("id: ")
+        ]
+        assert event_ids
+        replay = client.get(
+            run["events_url"],
+            headers={**headers, "Last-Event-ID": str(event_ids[-1] - 1)},
+        )
+        assert replay.status_code == 200
+        assert "event: run_completed" in replay.text
+        assert client.get(run["events_url"], headers=headers).status_code == 200
+        assert client.get(f"/api/v1/runs/{run['id']}", headers=headers).json()["attempt"] == 1

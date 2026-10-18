@@ -34,6 +34,7 @@ class AgentResponse(BaseModel):
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
     progress: list[AgentProgress] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
 
 
 class AgentFailure(BaseModel):

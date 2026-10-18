@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.persistence.database import Base
@@ -170,6 +170,8 @@ class RoutingDecisionLog(Base):
     latency_ms: Mapped[int] = mapped_column(Integer, default=0)
     input_tokens: Mapped[int] = mapped_column(Integer, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    explanation: Mapped[str] = mapped_column(String(240), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -219,7 +221,7 @@ class ToolExecution(Base):
     requester_id: Mapped[str] = mapped_column(String(80), index=True)
     run_id: Mapped[str | None] = mapped_column(ForeignKey("runs.id"), nullable=True, index=True)
     tool_id: Mapped[str] = mapped_column(String(120), index=True)
-    idempotency_key: Mapped[str] = mapped_column(String(160), unique=True, index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(160), index=True)
     status: Mapped[str] = mapped_column(String(24), default="started", index=True)
     request_json: Mapped[str] = mapped_column(Text, default="{}")
     result_json: Mapped[str] = mapped_column(Text, default="{}")
@@ -228,6 +230,14 @@ class ToolExecution(Base):
     error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "idempotency_key",
+            name="ux_tool_executions_org_idempotency",
+        ),
+    )
 
 
 class AgentExecutionMetric(Base):

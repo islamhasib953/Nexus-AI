@@ -1,3 +1,4 @@
+import math
 import re
 
 from sqlalchemy.orm import Session
@@ -76,16 +77,27 @@ class GeneralAgent(KnowledgeResearchAgent):
 
 class AnalyticsAgent(BaseAgent):
     agent_id = "analytics"
-    expression = re.compile(r"(?P<a>-?\d+(?:\.\d+)?)\s*(?P<op>[+\-*/])\s*(?P<b>-?\d+(?:\.\d+)?)")
+    expression = re.compile(
+        r"(?<![\w.])(?P<a>-?\d+(?:\.\d+)?)\s*(?P<op>[+\-*/])\s*(?P<b>-?\d+(?:\.\d+)?)(?![\w.])"
+    )
+    max_operand = 1_000_000_000_000
 
     def execute(
         self, db: Session, request: AgentRequest, capability: AgentCapability
     ) -> AgentResponse:
-        match = self.expression.search(request.prompt)
-        if not match:
+        matches = list(self.expression.finditer(request.prompt))
+        if len(matches) != 1:
             raise ValueError("Analytics request must contain one bounded arithmetic expression.")
+        match = matches[0]
         left = float(match.group("a"))
         right = float(match.group("b"))
+        if (
+            not math.isfinite(left)
+            or not math.isfinite(right)
+            or abs(left) > self.max_operand
+            or abs(right) > self.max_operand
+        ):
+            raise ValueError("Analytics operands exceed the bounded calculation limit.")
         operation = match.group("op")
         if operation == "+":
             answer = left + right
@@ -97,6 +109,8 @@ class AnalyticsAgent(BaseAgent):
             answer = left / right
         else:
             raise ValueError("Division by zero is not allowed.")
+        if not math.isfinite(answer) or abs(answer) > self.max_operand:
+            raise ValueError("Analytics result exceeds the bounded calculation limit.")
         rendered = str(int(answer)) if answer.is_integer() else str(answer)
         return AgentResponse(
             agent_id=self.agent_id,
@@ -116,7 +130,7 @@ class AnalyticsAgent(BaseAgent):
 
 
 class DomainAgent(KnowledgeResearchAgent):
-    """Shared bounded implementation for domain agents until real integrations are approved."""
+    """Honest bounded knowledge behavior until an approved domain integration exists."""
 
     def __init__(self, agent_id: str, router: SmartRequestRouter, documents=None) -> None:
         super().__init__(router, documents)
@@ -127,7 +141,13 @@ class DomainAgent(KnowledgeResearchAgent):
     ) -> AgentResponse:
         response = super().execute(db, request, capability)
         response.agent_id = self.agent_id
-        response.summary = f"{self.agent_id} completed a bounded knowledge workflow."
+        limitation = (
+            f"{self.agent_id} has no approved external system integration in this environment; "
+            "the result is limited to authorized conversation/document knowledge."
+        )
+        response.summary = f"{self.agent_id} returned a bounded knowledge workflow."
+        response.limitations.append(limitation)
+        response.content += f"\n\nLimitation: {limitation}"
         for progress in response.progress:
             progress.agent_id = self.agent_id
         return response

@@ -49,11 +49,18 @@ foreach ($command in @('uv sync --locked', 'uv run pytest', 'npm ci', 'npm run t
     Assert-Condition ($ci.Contains($command)) "CI command present: $command"
 }
 
-$secretMatches = rg --line-number '(?i)(api[_-]?key|password|secret)\s*[:=]\s*[A-Za-z0-9_\-]{12,}' (Join-Path $root 'apps') (Join-Path $root 'scripts') 2>$null
-Assert-Condition ($LASTEXITCODE -eq 1) 'no hard-coded secret-like value in application and script files'
+$scanFiles = @(
+    Get-ChildItem -LiteralPath (Join-Path $root 'apps') -Recurse -File
+    Get-ChildItem -LiteralPath (Join-Path $root 'scripts') -Recurse -File
+) | Where-Object { $_.Extension -notin @('.pyc', '.db', '.coverage', '.png', '.jpg', '.jpeg', '.gif') }
+$scanFiles = $scanFiles | Where-Object {
+    $_.FullName -notmatch '[\\/]\.venv[\\/]|[\\/]node_modules[\\/]|[\\/]dist[\\/]|[\\/]__pycache__[\\/]'
+}
+$secretMatches = $scanFiles | Select-String -Pattern '(?i)(api[_-]?key|password|secret)\s*[:=]\s*[A-Za-z0-9_\-]{12,}' -AllMatches
+Assert-Condition (-not $secretMatches) 'no hard-coded secret-like value in application and script files'
 
-$trailing = rg --line-number '[ \t]+$' (Join-Path $root 'apps') (Join-Path $root 'scripts') 2>$null
-Assert-Condition ($LASTEXITCODE -eq 1) 'no trailing whitespace in application and script files'
+$trailingMatches = $scanFiles | Select-String -Pattern '[ \t]+$' -AllMatches
+Assert-Condition (-not $trailingMatches) 'no trailing whitespace in application and script files'
 
 Write-Output "PASS: $($passes.Count)"
 foreach ($pass in $passes) { Write-Output "  $pass" }

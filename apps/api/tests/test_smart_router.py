@@ -20,10 +20,21 @@ def auth(client: TestClient, profile: str = "internal") -> dict[str, str]:
 
 def test_classifier_routes_simple_current_retrieval_and_action_requests() -> None:
     classifier = RequestClassifier()
-    assert classifier.classify("What is 2 + 2?").kind == "direct_model"
-    assert classifier.classify("What is the latest status today?").cacheable is False
-    assert classifier.classify("Find the internal policy document").kind == "retrieval"
-    assert classifier.classify("Send an email to the client").requires_tools is True
+    direct = classifier.classify("What is 2 + 2?")
+    current = classifier.classify("What is the latest status today?")
+    retrieval = classifier.classify("Find the internal policy document")
+    action = classifier.classify("Send an email to the client")
+    assert direct.kind == "direct_model" and direct.confidence < 1
+    assert current.kind == "current_data" and current.cacheable is False
+    assert retrieval.kind == "retrieval" and retrieval.requires_retrieval is True
+    assert action.requires_tools is True and action.confidence > 0.9
+
+
+def test_classifier_explains_ambiguous_action_signals() -> None:
+    decision = RequestClassifier().classify("Create a ticket for the latest outage policy")
+    assert decision.kind == "action"
+    assert decision.confidence < 0.9
+    assert "ambiguous" in decision.explanation
 
 
 def test_exact_cache_key_is_owner_and_tenant_aware(tmp_path: Path) -> None:
@@ -99,6 +110,8 @@ def test_current_data_bypasses_cache_and_logs_routing_decision(tmp_path: Path) -
             assert log is not None
             assert log.route_kind == "current_data"
             assert log.cache_status == "miss_bypass"
+            assert log.confidence >= 0.9
+            assert log.explanation
 
 
 def test_repeated_simple_request_hits_exact_cache(tmp_path: Path) -> None:

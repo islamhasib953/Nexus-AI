@@ -5,10 +5,10 @@ import json
 import time
 from dataclasses import dataclass
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -72,9 +72,15 @@ def verify_token(token: str, settings: Settings) -> Principal:
 
 
 def require_principal(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-    settings: Settings = Depends(get_settings),
 ) -> Principal:
+    settings: Settings = request.app.state.settings
+    if settings.app_env.lower() != "development" or not settings.dev_auth_enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="A production identity provider is required; development auth is disabled.",
+        )
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(status_code=401, detail="Authentication is required.")
     return verify_token(credentials.credentials, settings)

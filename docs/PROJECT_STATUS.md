@@ -3,14 +3,16 @@
 | Field | Current value |
 | --- | --- |
 | Governing specification | Enterprise Multi-Agent AI Platform master prompt supplied by the project owner |
-| Active phase | Phase 14 — Observability, Operations, and Scaling |
+| Active phase | Remediation Final Verification — Local PASS, Production BLOCKED |
 | Repository baseline | Git repository on `main`; only the original README and LICENSE existed before Phase 0 artifacts |
-| Implemented product capabilities | None |
+| Implemented product capabilities | Local foundation through Phase 14; production integrations remain unverified |
 | Configured providers, databases, or integrations | None |
 | Production deployment | Not started; must not be claimed |
 | Current release target | R1 Foundation (defined in `docs/releases/phase-0-release-plan.md`) |
 | Model/provider policy | Free-tier or local/open-weight models first; paid fallback only with explicit owner approval |
-| Next phase | Phase 2 — Repository and implementation foundation |
+| Next phase | Remediation Phase 4 — external integrations and release verification |
+
+The remediation tracker is maintained in [docs/remediation/tracker.md](remediation/tracker.md), with Phase 0 evidence in [phase-0-baseline.md](remediation/phase-0-baseline.md), Phase 1 evidence in [phase-1-ci-validation.md](remediation/phase-1-ci-validation.md), Phase 2 evidence in [phase-2-models-routing-agents.md](remediation/phase-2-models-routing-agents.md), Phase 3 evidence in [phase-3-execution-rag-security.md](remediation/phase-3-execution-rag-security.md), and the final gate in [final-readiness-report.md](remediation/final-readiness-report.md).
 
 ## Phase ledger
 
@@ -55,6 +57,6 @@
 
 ## Next actions
 
-1. Provision AWS/RDS/Qdrant/Redis/CloudWatch and run the Phase 13 and Phase 14 production smoke, telemetry, alert-delivery, and restore drills.
-2. Resolve identity provider and data-classification/retention decisions before connecting production users or data.
-3. Evaluate actual embedding candidates, provider terms, limits, and provider-health probes before selecting a production runtime.
+1. Select and connect the production OIDC/JWKS identity provider, then run tenant-isolation tests against it.
+2. Provision AWS/RDS/Qdrant/Redis/CloudWatch and run the Phase 13 and Phase 14 production smoke, telemetry, alert-delivery, and restore drills.
+3. Evaluate actual embedding candidates and approved MCP/business integrations before selecting production runtimes.

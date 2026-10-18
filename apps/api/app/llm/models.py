@@ -18,6 +18,10 @@ class StructuredOutputError(ModelGatewayError):
     pass
 
 
+class ModelCapabilityError(ModelGatewayError):
+    """The selected model cannot safely satisfy the requested capability."""
+
+
 @dataclass(frozen=True)
 class ModelSpec:
     id: str
@@ -28,6 +32,17 @@ class ModelSpec:
     input_cost_per_million_usd: float = 0.0
     output_cost_per_million_usd: float = 0.0
     paid: bool = False
+    supports_streaming: bool = False
+    supports_tools: bool = False
+    supports_multimodal: bool = False
+    requires_api_key: bool = False
+    capabilities: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.context_window <= 0:
+            raise ValueError("Model context window must be positive.")
+        if self.input_cost_per_million_usd < 0 or self.output_cost_per_million_usd < 0:
+            raise ValueError("Model costs cannot be negative.")
 
 
 @dataclass(frozen=True)
