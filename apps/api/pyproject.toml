@@ -6,12 +6,14 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.20.0",
+  "cryptography>=43,<46",
   "fastapi>=0.115,<1",
   "httpx>=0.28,<1",
   "langgraph>=0.2,<2",
   "langgraph-checkpoint-postgres>=2,<4",
   "psycopg[binary]>=3.2,<4",
   "pydantic-settings>=2.4,<3",
+  "pyjwt>=2.9,<3",
   "sqlalchemy>=2.0,<3",
   "structlog>=24,<26",
   "uvicorn[standard]>=0.30,<1",

@@ -1,9 +1,14 @@
 from pathlib import Path
+from time import time
 
+import httpx
+import jwt
 import pytest
+from app.core.auth import AuthenticationError, OIDCAuthenticator
 from app.core.config import Settings
 from app.main import create_app
 from app.security.policy import PolicyEngine, RiskCategory
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 
 
@@ -87,3 +92,44 @@ def test_development_auth_is_not_available_outside_development(tmp_path: Path) -
 def test_production_settings_require_identity_provider_and_real_embeddings() -> None:
     with pytest.raises(ValueError, match="identity provider"):
         Settings(app_env="production", dev_auth_enabled=False, embedding_provider="openai")
+
+
+def test_oidc_authenticator_validates_jwks_claims_and_unknown_keys() -> None:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_jwk = jwt.algorithms.RSAAlgorithm.to_jwk(private_key.public_key())
+    jwk = {**__import__("json").loads(public_jwk), "kid": "key-1", "use": "sig", "alg": "RS256"}
+
+    def jwks(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"keys": [jwk]})
+
+    claims = {
+        "sub": "user-1",
+        "org": "org-1",
+        "role": "internal_member",
+        "workspace": "internal",
+        "iss": "https://issuer.test",
+        "aud": "nexus",
+        "iat": int(time()),
+        "exp": int(time()) + 300,
+    }
+    token = jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": "key-1"})
+    with httpx.Client(transport=httpx.MockTransport(jwks)) as client:
+        authenticator = OIDCAuthenticator(
+            "https://issuer.test",
+            "nexus",
+            "https://issuer.test/.well-known/jwks.json",
+            client=client,
+        )
+        principal = authenticator.verify(token)
+        assert principal.organization_id == "org-1"
+        assert principal.workspace == "internal"
+
+        wrong_audience = jwt.encode(
+            {**claims, "aud": "other"}, private_key, algorithm="RS256", headers={"kid": "key-1"}
+        )
+        with pytest.raises(AuthenticationError, match="Invalid identity token"):
+            authenticator.verify(wrong_audience)
+
+        unknown_key = jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": "unknown"})
+        with pytest.raises(AuthenticationError, match="unknown"):
+            authenticator.verify(unknown_key)

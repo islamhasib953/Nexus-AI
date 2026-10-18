@@ -22,6 +22,8 @@ The repository was re-audited and remediated phase by phase. The local foundatio
 - Configurable OpenAI-compatible embeddings with dimension validation; hash embeddings are development-only.
 - Sensitive tool-result redaction and organization-scoped idempotency.
 - Application-scoped settings for authentication dependencies; development authentication is unavailable outside development.
+- Maintained-library OIDC/JWKS verification with signature, issuer, audience, expiry, `iat`, key rotation, and tenant-claim checks.
+- CI now pins Python 3.12 through `.python-version`, and the API image has a non-root user and runtime healthcheck.
 
 ## Release decision
 
@@ -29,10 +31,12 @@ The repository was re-audited and remediated phase by phase. The local foundatio
 
 Production cannot be marked ready until all of the following are executed in the authorized target environment:
 
-1. Configure and verify an OIDC/JWKS identity provider and real tenant claims.
+1. Connect and verify the selected OIDC/JWKS identity provider, including real tenant claims and key rotation.
 2. Run with PostgreSQL, Qdrant, Redis, and the approved embedding runtime.
 3. Verify at least one real model provider and one real MCP/business integration, including timeout, retry, approval, and rollback behavior.
 4. Build and scan the production containers, run migrations, deploy to AWS, verify network-path SSE, and perform backup/restore.
 5. Verify CloudWatch/alert delivery, provider health probes, and load/cost targets against the release gates.
+
+The Analytics agent remains bounded arithmetic until an approved tenant-scoped dataset and schema are supplied; implementing a client-supplied or fabricated dataset would violate the security and provenance requirements.
 
 These are external verification gates, not silently skipped tests. Docker and the AWS/provider services are not available in this workspace, so their status remains `UNVERIFIED` or `BLOCKED` in the remediation tracker.

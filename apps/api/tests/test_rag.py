@@ -110,6 +110,17 @@ def test_versioning_creates_new_version_without_exposing_deleted_content(tmp_pat
         assert all(first["id"] != item["document_id"] for item in result["citations"])
 
 
+def test_knowledge_search_rejects_invalid_limits_without_server_error(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        headers = auth(client, "internal")
+        response = client.post(
+            "/api/v1/knowledge/search",
+            headers=headers,
+            json={"query": "policy", "limit": 0},
+        )
+        assert response.status_code == 422
+
+
 def test_configured_embedding_provider_normalizes_and_validates_dimensions() -> None:
     def valid(_: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"data": [{"embedding": [3.0, 4.0]}]})
@@ -131,5 +142,6 @@ def test_configured_embedding_provider_normalizes_and_validates_dimensions() -> 
             identity_provider="oidc",
             identity_issuer_url="https://issuer.test",
             identity_audience="nexus",
+            identity_jwks_url="https://issuer.test/.well-known/jwks.json",
             embedding_provider="hash",
         )

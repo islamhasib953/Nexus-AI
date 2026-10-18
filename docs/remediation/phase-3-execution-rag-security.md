@@ -14,6 +14,7 @@ Date: 2026-10-18
 - Scoped tool idempotency to `organization_id` and added migration `0009_tenant_scoped_tool_idempotency`.
 - Added sensitive-key redaction before tool results are persisted or returned.
 - Made authentication dependencies read the app's injected settings instead of the process-global settings cache.
+- Added a maintained-library OIDC/JWKS verifier with issuer, audience, signature, expiration, `iat`, `kid` rotation refresh, and required tenant claims.
 
 ## Verification
 
@@ -23,8 +24,9 @@ Date: 2026-10-18
 - Tool tests passed, including remote MCP fixture transport, timeout, redaction, tenant-scoped idempotency, schema validation, and provider failure handling.
 - RAG tests passed, including embedding-provider normalization, dimension validation, deletion invalidation, citations, and tenant/workspace isolation.
 - Security tests passed, including production identity/embedding guards, approval policy, audit behavior, and development-auth isolation.
+- OIDC tests passed with generated RSA keys, valid claims, wrong audience, and unknown signing-key cases.
 - Alembic `0009` upgrade → downgrade → upgrade passed on SQLite.
 
 ## Explicit limits
 
-The remote MCP endpoint, OIDC/JWKS identity provider, Qdrant service, and real embedding runtime still require an approved external environment. The code fails closed or reports these dependencies as unconfigured; fixture tests are not production connectivity verification. Analytics remains intentionally bounded arithmetic until an authorized dataset/query contract is approved.
+The OIDC verifier is implemented but its live issuer/JWKS availability, key rotation, and tenant-claim mapping still require an approved external environment. The remote MCP endpoint, Qdrant service, and real embedding runtime likewise require external verification. Fixture tests are not production connectivity verification. Analytics remains intentionally bounded arithmetic until an authorized dataset/query contract is approved.

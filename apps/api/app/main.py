@@ -17,6 +17,7 @@ from app.api.routes.operations import router as operations_router
 from app.api.routes.tools import router as tools_router
 from app.api.routes.workspace import router as workspace_router
 from app.api.schemas import ErrorDetail, ErrorEnvelope
+from app.core.auth import OIDCAuthenticator
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.core.middleware import (
@@ -74,6 +75,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     application = FastAPI(title="Nexus-AI API", version=settings.app_version, lifespan=lifespan)
     application.state.settings = settings
+    if settings.identity_provider == "oidc":
+        application.state.authenticator = OIDCAuthenticator(
+            settings.identity_issuer_url,
+            settings.identity_audience,
+            settings.identity_jwks_url,
+            tuple(settings.identity_algorithms.split(",")),
+        )
     application.state.database = Database(settings.database_url)
     application.state.model_router = ModelRouter(settings)
     application.state.smart_router = SmartRequestRouter(settings, application.state.model_router)

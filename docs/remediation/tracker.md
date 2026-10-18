@@ -13,13 +13,13 @@ This tracker is the source of truth for the remediation program. `IMPLEMENTED` m
 | B-003 | P1 | routing | Add structured confidence/ambiguity and capability-aware adaptive routing | IMPLEMENTED | model-assisted classification and quality benchmark remain |
 | B-004 | P2 | routing | Evaluate optional tenant-safe semantic caching against exact-cache baseline | NOT_STARTED | embedding choice/evaluation data |
 | C-001 | P1 | agents | Replace or accurately bound domain-agent wrappers with real authorized workflows | IMPLEMENTED | approved business data/integrations |
-| C-002 | P1 | analytics | Add safe dataset discovery/query/aggregation workflow with limits | NOT_STARTED | approved data source |
+| C-002 | P1 | analytics | Add safe dataset discovery/query/aggregation workflow with limits | BLOCKED | approved tenant-scoped data source and schema |
 | C-003 | P1 | orchestration | Verify typed state, handoffs, cancellation, recovery, and duplicate protection | IMPLEMENTED | production worker topology |
 | D-001 | P1 | MCP/tools | Implement supported remote MCP transport and real compatible integration tests | IMPLEMENTED | approved server/credentials for production verification |
 | D-002 | P1 | MCP/tools | Harden output redaction, cancellation, retry and execution budgets | IMPLEMENTED | none |
 | E-001 | P1 | RAG | Add configurable real embedding provider and compatibility metadata | IMPLEMENTED | approved free/local embedding runtime for production verification |
 | E-002 | P1 | RAG | Improve ingestion, retrieval quality, deletion consistency, and evaluation | NOT_STARTED | embedding/vector runtime |
-| F-001 | P1 | security | Replace development auth with a production identity boundary and verify tenant enforcement | IN_PROGRESS | selected OIDC/JWKS identity provider |
+| F-001 | P1 | security | Replace development auth with a production identity boundary and verify tenant enforcement | IMPLEMENTED | live issuer/JWKS availability and tenant-claim verification remain external |
 | G-001 | P1 | lifecycle | Complete reconnect, duplicate event, cancellation, and recovery verification | VERIFIED | none for local verification |
 | H-001 | P2 | frontend | Add end-to-end tests against a running API and remove any fake success states | NOT_STARTED | browser/e2e runtime |
 | I-001 | P1 | observability | Add shared telemetry export, alert delivery, and external provider health probes | BLOCKED | AWS/CloudWatch or approved service |

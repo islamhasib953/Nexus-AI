@@ -20,6 +20,11 @@ class IngestDocumentRequest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class SearchKnowledgeRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=10_000)
+    limit: int = Field(default=5, ge=1, le=20)
+
+
 def get_db(request: Request):
     yield from request.app.state.database.sessions()
 
@@ -86,21 +91,18 @@ def list_documents(
 
 @router.post("/search")
 def search_knowledge(
-    body: dict[str, Any],
+    body: SearchKnowledgeRequest,
     principal: Principal = Depends(require_principal),
     service: DocumentService = Depends(get_service),
     db: Session = Depends(get_db),
 ):
-    query = body.get("query")
-    if not isinstance(query, str) or not query.strip():
-        raise HTTPException(status_code=422, detail="query is required")
     result = service.search(
         db,
         organization_id=principal.organization_id,
         user_id=principal.user_id,
         workspace=principal.workspace,
-        query=query,
-        limit=int(body.get("limit", 5)),
+        query=body.query,
+        limit=body.limit,
     )
     return result.as_dict()
 

@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     identity_provider: str = "development"
     identity_issuer_url: str = ""
     identity_audience: str = ""
+    identity_jwks_url: str = ""
+    identity_algorithms: str = "RS256"
     log_level: str = "INFO"
     api_host: str = "0.0.0.0"
     api_port: int = Field(default=8000, ge=1, le=65535)
@@ -71,8 +73,12 @@ class Settings(BaseSettings):
                 raise ValueError("Development authentication must be disabled in production.")
             if self.identity_provider == "development":
                 raise ValueError("A production identity provider must be configured.")
-            if not self.identity_issuer_url or not self.identity_audience:
-                raise ValueError("Production identity issuer and audience are required.")
+            if (
+                not self.identity_issuer_url
+                or not self.identity_audience
+                or not self.identity_jwks_url
+            ):
+                raise ValueError("Production identity issuer, audience, and JWKS URL are required.")
             if self.embedding_provider == "hash":
                 raise ValueError("Hash embeddings are not allowed in production.")
         if self.embedding_provider != "hash" and not self.embedding_base_url:
