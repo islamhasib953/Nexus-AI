@@ -1,0 +1,10 @@
+[
+  {"id": "analytics-001", "prompt": "calculate 6 * 7", "expected_agent": "analytics", "workspace": "internal"},
+  {"id": "data-001", "prompt": "design a data pipeline", "expected_agent": "data-engineering", "workspace": "internal"},
+  {"id": "crm-001", "prompt": "help with CRM account", "expected_agent": "crm", "workspace": "internal"},
+  {"id": "support-001", "prompt": "support login issue", "expected_agent": "customer-support", "workspace": "customer"},
+  {"id": "success-001", "prompt": "customer onboarding plan", "expected_agent": "customer-success", "workspace": "customer"},
+  {"id": "finance-001", "prompt": "finance budget policy", "expected_agent": "finance", "workspace": "internal"},
+  {"id": "product-001", "prompt": "product feature guide", "expected_agent": "customer-product", "workspace": "customer"},
+  {"id": "security-001", "prompt": "support login issue", "expected_agent": "customer-support", "workspace": "customer", "must_not": "cross-tenant data"}
+]

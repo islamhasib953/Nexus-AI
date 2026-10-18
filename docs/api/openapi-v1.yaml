@@ -1,0 +1,248 @@
+openapi: 3.1.0
+info:
+  title: Nexus-AI API
+  version: 0.1.0-draft
+  description: Phase 1 design contract. This is not generated from an implementation.
+servers:
+  - url: /api/v1
+paths:
+  /me:
+    get:
+      summary: Get resolved request identity and workspace permissions
+      responses:
+        '200':
+          description: Resolved identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /conversations:
+    get:
+      summary: List authorized conversations
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Conversation page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationPage'
+    post:
+      summary: Create an authorized conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                workspace_kind:
+                  type: string
+                  enum: [internal, customer]
+                title:
+                  type: string
+                  maxLength: 200
+              required: [workspace_kind]
+      responses:
+        '201':
+          description: Created conversation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+  /conversations/{conversationId}/runs:
+    post:
+      summary: Submit a message and create a trackable run
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                content:
+                  type: string
+                  minLength: 1
+                  maxLength: 50000
+              required: [content]
+      responses:
+        '202':
+          description: Run accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /runs/{runId}:
+    get:
+      summary: Get authorized run state and summary
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Run state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+    post:
+      summary: This operation is intentionally unavailable
+      responses:
+        '405':
+          description: Method not allowed
+  /runs/{runId}/cancel:
+    post:
+      summary: Request cooperative run cancellation
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '202':
+          description: Cancellation requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+        '409':
+          description: Run is terminal or action outcome cannot be cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /runs/{runId}/events:
+    get:
+      summary: Stream authorized run events using Server-Sent Events
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: SSE stream; reconnect with Last-Event-ID
+          content:
+            text/event-stream:
+              schema:
+                type: string
+  /documents:
+    post:
+      summary: Create an authorized document ingestion job
+      responses:
+        '202':
+          description: Ingestion job accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '403':
+          $ref: '#/components/responses/AuthorizationDenied'
+components:
+  parameters:
+    ConversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+  responses:
+    Unauthenticated:
+      description: Authentication is required
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    AuthorizationDenied:
+      description: Access is denied or resource existence is hidden
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    ValidationFailed:
+      description: Request schema validation failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  schemas:
+    Me:
+      type: object
+      required: [user_id, memberships]
+      properties:
+        user_id: { type: string, format: uuid }
+        memberships:
+          type: array
+          items: { $ref: '#/components/schemas/Membership' }
+    Membership:
+      type: object
+      required: [organization_id, role, workspace_permissions]
+      properties:
+        organization_id: { type: string, format: uuid }
+        role: { type: string }
+        workspace_permissions:
+          type: array
+          items: { type: string }
+    Conversation:
+      type: object
+      required: [id, workspace_kind, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        workspace_kind: { type: string, enum: [internal, customer] }
+        title: { type: string }
+        status: { type: string, enum: [active, archived] }
+        created_at: { type: string, format: date-time }
+    ConversationPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Conversation' }
+        next_cursor: { type: [string, 'null'] }
+    Run:
+      type: object
+      required: [id, conversation_id, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        conversation_id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [queued, running, waiting_for_approval, completed, failed, cancelled]
+        created_at: { type: string, format: date-time }
+        events_url: { type: string }
+    Job:
+      type: object
+      required: [id, status]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [queued, running, completed, failed, cancelled] }
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id, retryable]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            request_id: { type: string, format: uuid }
+            retryable: { type: boolean }
+            details: { type: array, items: {} }

@@ -1,0 +1,20 @@
+flowchart TD
+  failure["Failure detected"] --> classified{"Failure class"}
+  classified -->|"Cancellation"| cancel["Persist cancelled run and stop safe work"]
+  classified -->|"Provider timeout or rate limit"| providerPolicy["Apply bounded retry and eligible free fallback"]
+  providerPolicy --> providerOk{"Recovered?"}
+  providerOk -->|"Yes"| resume["Resume run from checkpoint"]
+  providerOk -->|"No"| unavailable["Return transparent temporary failure"]
+  classified -->|"Worker interruption"| reclaim["Reclaim durable job with lease check"]
+  reclaim --> resume
+  classified -->|"Retrieval or tool failure"| retryable{"Read-only and retryable?"}
+  retryable -->|"Yes"| boundedRetry["Retry with limit and backoff"]
+  retryable -->|"No"| fail["Persist safe failure and audit"]
+  classified -->|"Database failure"| dbRetry["Fail request safely and use health recovery"]
+  boundedRetry --> resume
+  resume --> complete["Complete with validated result"]
+  cancel --> final["Terminal event"]
+  unavailable --> final
+  fail --> final
+  dbRetry --> final
+  complete --> final

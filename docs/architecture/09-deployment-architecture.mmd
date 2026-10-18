@@ -1,0 +1,16 @@
+flowchart TB
+  internet["Internet"] --> tls["TLS reverse proxy or load balancer"]
+  tls --> web["React static assets"]
+  tls --> app["FastAPI application container"]
+  app --> worker["Worker container or process"]
+  app --> postgres["PostgreSQL"]
+  worker --> postgres
+  app --> redis["Redis"]
+  app --> qdrant["Qdrant"]
+  worker --> qdrant
+  app --> secrets["Secrets manager or local development environment"]
+  app --> providers["Free-first model providers"]
+  app --> telemetry["OpenTelemetry collector or sink"]
+  ci["GitHub Actions"] --> registry["Container registry"]
+  registry --> app
+  registry --> worker

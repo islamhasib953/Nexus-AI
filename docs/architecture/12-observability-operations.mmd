@@ -1,0 +1,14 @@
+flowchart LR
+  Web[Internal workspace\nOperations dashboard] --> OpsAPI[FastAPI /operations\ninternal role gate]
+  OpsAPI --> Metrics[OperationsService\ntenant-scoped aggregation]
+  Metrics --> Runs[(Runs + events)]
+  Metrics --> Usage[(Model usage)]
+  Metrics --> Agent[(Agent execution metrics)]
+  Metrics --> Tools[(Tool executions)]
+  Metrics --> Routing[(Routing decisions)]
+  Metrics --> Docs[(Document chunks)]
+  Router[Model Router\nprovider circuit] --> Metrics
+  Metrics --> Alerts[Threshold + SLO alerts]
+  Alerts --> Runbook[On-call runbooks\nincident process]
+  Logs[JSON logs + request ID] --> Cloud[CloudWatch / external log sink\nproduction target]
+  Metrics --> Cloud

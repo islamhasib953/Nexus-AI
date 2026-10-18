@@ -1,0 +1,24 @@
+flowchart TB
+  browser["React and TypeScript workspace"] -->|"HTTPS and SSE"| api["FastAPI modular monolith"]
+  subgraph application["Nexus-AI application modules"]
+    api --> context["Authentication and request context"]
+    context --> conversation["Conversation and run service"]
+    conversation --> router["Smart router and policy engine"]
+    router --> runtime["LangGraph agent runtime"]
+    runtime --> agents["Restricted agent definitions"]
+    runtime --> retrieval["Retrieval service"]
+    runtime --> tools["Tool registry and execution service"]
+    router --> provider["Model provider gateway"]
+    api --> streaming["SSE event service"]
+    api --> jobs["Durable job dispatcher"]
+  end
+  conversation --> postgres["PostgreSQL"]
+  runtime --> postgres
+  jobs --> postgres
+  retrieval --> qdrant["Qdrant"]
+  router --> redis["Redis"]
+  provider --> providers["Groq Hugging Face local models"]
+  tools --> integrations["Approved read-only integrations"]
+  jobs --> worker["Worker process"]
+  worker --> postgres
+  worker --> qdrant

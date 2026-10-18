@@ -1,0 +1,14 @@
+flowchart TB
+  subgraph Sidebar
+    Identity[Role and identity]
+    New[+ New conversation]
+    Ops[Operations - internal only]
+    History[Conversation list]
+    Approvals[Pending approvals]
+  end
+  subgraph Content[Active workspace]
+    Header[Workspace + run status]
+    Messages[Persistent message history]
+    Composer[Prompt composer + cancellation]
+  end
+  Sidebar --> Content

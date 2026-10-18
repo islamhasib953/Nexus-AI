@@ -1,0 +1,9 @@
+flowchart TB
+  Title[Confirm a high-risk action]
+  Summary[Action, target, policy risk and expiry]
+  Match[Immutable action payload fingerprint]
+  Cancel[Cancel]
+  Approve[Approve - internal role only]
+  Title --> Summary --> Match
+  Match --> Cancel
+  Match --> Approve

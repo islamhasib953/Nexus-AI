@@ -1,0 +1,27 @@
+services:
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.production
+    image: ${NEXUS_API_IMAGE:-nexus-ai-api:release}
+    env_file: .env.production
+    restart: unless-stopped
+    read_only: true
+    tmpfs: /tmp
+    ports: ["127.0.0.1:8000:8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/live', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile.production
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    image: ${NEXUS_WEB_IMAGE:-nexus-ai-web:release}
+    restart: unless-stopped
+    ports: ["127.0.0.1:8080:80"]
+    depends_on:
+      api: { condition: service_healthy }

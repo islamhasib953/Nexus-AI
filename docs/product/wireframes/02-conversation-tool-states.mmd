@@ -1,0 +1,12 @@
+stateDiagram-v2
+  [*] --> Draft
+  Draft --> Queued: submit
+  Queued --> Running: stream opens
+  Running --> Streaming: message_delta
+  Streaming --> Completed: run_completed
+  Queued --> Cancelled: cancel
+  Running --> Cancelled: cancel
+  Running --> Failed: provider/agent/tool failure
+  Running --> AwaitingApproval: high-risk action
+  AwaitingApproval --> Running: matching approved request
+  AwaitingApproval --> Cancelled: expires or cancelled

@@ -1,0 +1,15 @@
+flowchart LR
+  internalUser["Internal member"] --> web["Nexus-AI web workspace"]
+  customer["External customer"] --> web
+  tenantAdmin["Organization administrator"] --> web
+  operator["Platform operator"] --> ops["Operations console"]
+  web --> api["Nexus-AI application"]
+  ops --> api
+  api --> idp["Identity provider"]
+  api --> knowledge["Approved knowledge sources"]
+  api --> analytics["Approved analytics source"]
+  api --> modelProviders["Free-first model providers"]
+  api --> approvedTools["Approved MCP and business tools"]
+  api --> observability["Authorized telemetry sink"]
+  customer -->|"customer boundary"| publicKnowledge["Customer-approved product knowledge"]
+  publicKnowledge --> api

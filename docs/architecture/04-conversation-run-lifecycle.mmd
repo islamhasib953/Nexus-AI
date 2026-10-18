@@ -1,0 +1,16 @@
+stateDiagram-v2
+  [*] --> queued
+  queued --> running: worker or request handler claims run
+  queued --> cancelled: user cancels before start
+  running --> streaming: response events available
+  streaming --> running: tool or agent step continues
+  running --> waitingApproval: policy requires approval
+  waitingApproval --> running: approved and reauthorized
+  waitingApproval --> cancelled: rejected or expired
+  running --> completed: validated response or verified outcome
+  running --> failed: unrecoverable error
+  running --> cancelled: user cancellation
+  failed --> queued: retryable background work only
+  completed --> [*]
+  cancelled --> [*]
+  failed --> [*]

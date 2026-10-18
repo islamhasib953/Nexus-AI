@@ -1,0 +1,19 @@
+sequenceDiagram
+  participant User as Requester
+  participant Api as Application
+  participant Policy as Policy engine
+  participant Approver as Authorized approver
+  participant Tool as Mutating tool
+  participant Audit as Audit store
+  User->>Api: Propose action
+  Api->>Policy: Validate arguments risk and permissions
+  Policy-->>Api: Approval required or denied
+  Api->>Audit: Persist proposed action and policy decision
+  Api-->>Approver: Present exact action summary
+  Approver->>Api: Approve reject or let expire
+  Api->>Policy: Reauthorize exact approved action
+  Policy-->>Api: Execute only if still valid
+  Api->>Tool: Execute idempotent action
+  Tool-->>Api: Verified outcome
+  Api->>Audit: Persist final outcome
+  Api-->>User: Show verified completed failed or cancelled state

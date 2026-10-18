@@ -1,0 +1,20 @@
+flowchart TD
+  request["Incoming message"] --> authenticate["Authenticate and resolve server context"]
+  authenticate --> valid{"Authorized and valid?"}
+  valid -->|"No"| denied["Return policy error and audit"]
+  valid -->|"Yes"| context["Load authorized conversation context"]
+  context --> exactCache{"Exact cache eligible and hit?"}
+  exactCache -->|"Yes"| cached["Return cached authorized response"]
+  exactCache -->|"No"| route["Apply deterministic rules and classifier if needed"]
+  route --> simple{"Conversation only or simple answer?"}
+  simple -->|"Yes"| direct["Direct model response"]
+  simple -->|"No"| retrievalNeeded{"Authorized knowledge required?"}
+  retrievalNeeded -->|"Yes"| rag["Authorized retrieval and cited generation"]
+  retrievalNeeded -->|"No"| liveData{"Approved live data or tool required?"}
+  liveData -->|"Yes"| policy["Policy check and restricted agent or tool"]
+  liveData -->|"No"| direct
+  policy --> result["Validate result and persist events"]
+  direct --> result
+  rag --> result
+  cached --> complete["Stream and complete run"]
+  result --> complete

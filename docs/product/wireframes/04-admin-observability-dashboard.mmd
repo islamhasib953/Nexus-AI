@@ -1,0 +1,10 @@
+flowchart TB
+  Header[Service health / rolling window]
+  Cards[Runs | queue depth | cache hit rate | estimated model cost]
+  Providers[Provider circuit status and recent failure count]
+  Breakdown[Cost by provider/model/agent]
+  Alerts[Threshold and SLO alerts]
+  Header --> Cards
+  Cards --> Providers
+  Cards --> Breakdown
+  Cards --> Alerts

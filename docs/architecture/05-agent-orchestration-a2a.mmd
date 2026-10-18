@@ -1,0 +1,12 @@
+flowchart LR
+  userMessage["Authorized user message"] --> orchestrator["Restricted orchestrator"]
+  orchestrator --> knowledgeAgent["Knowledge and Research agent"]
+  orchestrator --> productAgent["Customer Product agent"]
+  orchestrator --> analyticsAgent["Read-only Analytics agent"]
+  knowledgeAgent --> retrieval["Authorized retrieval service"]
+  productAgent --> customerRetrieval["Customer-approved retrieval service"]
+  analyticsAgent --> analyticsTool["Validated read-only analytics tool"]
+  orchestrator --> policy["Capability policy"]
+  policy --> orchestrator
+  orchestrator --> response["Validated final response"]
+  remoteAgent["Future A2A remote agent"] -->|"versioned authenticated contract only when justified"| orchestrator

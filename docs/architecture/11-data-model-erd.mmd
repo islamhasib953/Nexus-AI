@@ -1,0 +1,15 @@
+erDiagram
+  ORGANIZATIONS ||--o{ MEMBERSHIPS : has
+  USERS ||--o{ MEMBERSHIPS : joins
+  ORGANIZATIONS ||--o{ CUSTOMERACCOUNTS : scopes
+  ORGANIZATIONS ||--o{ CONVERSATIONS : owns
+  CUSTOMERACCOUNTS ||--o{ CONVERSATIONS : limits
+  CONVERSATIONS ||--o{ MESSAGES : contains
+  CONVERSATIONS ||--o{ RUNS : executes
+  RUNS ||--o{ RUNEVENTS : emits
+  RUNS ||--o{ CITATIONS : records
+  DOCUMENTS ||--o{ DOCUMENTVERSIONS : versions
+  DOCUMENTVERSIONS ||--o{ CITATIONS : supports
+  RUNS ||--o{ TOOLEXECUTIONS : invokes
+  TOOLDEFINITIONS ||--o{ TOOLEXECUTIONS : defines
+  ACTIONS ||--o{ APPROVALS : requires

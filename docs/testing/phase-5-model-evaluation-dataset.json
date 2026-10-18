@@ -1,0 +1,21 @@
+[
+  {
+    "id": "general-answer",
+    "task": "chat",
+    "prompt": "Summarize the purpose of a durable run in one sentence.",
+    "expected_traits": ["concise", "mentions persistence"]
+  },
+  {
+    "id": "structured-answer",
+    "task": "structured",
+    "prompt": "Return an answer and confidence.",
+    "schema": {"required": ["answer", "confidence"]},
+    "expected_traits": ["valid JSON", "required fields"]
+  },
+  {
+    "id": "provider-failure",
+    "task": "resilience",
+    "prompt": "Explain safe fallback.",
+    "expected_traits": ["bounded retry", "configured fallback only"]
+  }
+]

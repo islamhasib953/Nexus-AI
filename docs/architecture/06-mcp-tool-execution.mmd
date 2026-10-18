@@ -1,0 +1,16 @@
+sequenceDiagram
+  participant User as Authorized user
+  participant Api as FastAPI application
+  participant Policy as Policy engine
+  participant Registry as Tool registry
+  participant Tool as MCP or integration tool
+  participant Audit as Audit store
+  User->>Api: Submit request
+  Api->>Policy: Check user tenant agent and action policy
+  Policy-->>Api: Allow restricted read-only tool or deny
+  Api->>Registry: Resolve approved tool schema and limits
+  Registry-->>Api: Validated tool contract
+  Api->>Tool: Invoke validated arguments with scoped credential
+  Tool-->>Api: Result or bounded failure
+  Api->>Audit: Record request policy result and outcome
+  Api-->>User: Stream safe result or error

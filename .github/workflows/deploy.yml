@@ -1,0 +1,53 @@
+name: Build and deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        required: true
+        description: Immutable image tag, normally a git SHA
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+  image:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push API image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          TAG: ${{ inputs.image_tag }}
+        run: |
+          docker build -f apps/api/Dockerfile.production -t "$REGISTRY/nexus-ai-api:$TAG" apps/api
+          docker push "$REGISTRY/nexus-ai-api:$TAG"
+      - name: Build and push web image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          TAG: ${{ inputs.image_tag }}
+        run: |
+          docker build -f apps/web/Dockerfile.production --build-arg VITE_API_BASE_URL="${{ vars.VITE_API_BASE_URL }}" -t "$REGISTRY/nexus-ai-web:$TAG" apps/web
+          docker push "$REGISTRY/nexus-ai-web:$TAG"
+  deploy:
+    needs: image
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy through SSM
+        env:
+          INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+          TAG: ${{ inputs.image_tag }}
+        run: |
+          aws ssm send-command --instance-ids "$INSTANCE_ID" --document-name AWS-RunShellScript --parameters commands="$(jq -Rs . infra/aws/deploy-commands.sh)" --comment "Nexus-AI $TAG"
