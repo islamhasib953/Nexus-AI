@@ -24,6 +24,7 @@ class SmartRequestRouter:
         self,
         db: Session,
         *,
+        organization_id: str,
         prompt: str,
         conversation_id: str,
         owner_id: str,
@@ -35,7 +36,7 @@ class SmartRequestRouter:
         )
         model_id = self.model_router.settings.llm_primary_model_id
         key = self.cache.make_key(
-            organization_id="pending",
+            organization_id=organization_id,
             owner_id=owner_id,
             workspace=workspace,
             model_id=model_id,
@@ -57,14 +58,14 @@ class SmartRequestRouter:
         prompt: str,
     ) -> tuple[CompletionResult, RouteDecision, SelectedContext, str]:
         started = perf_counter()
-        decision, selected, pending_key = self.prepare(
+        decision, selected, key = self.prepare(
             db,
+            organization_id=organization_id,
             prompt=prompt,
             conversation_id=conversation_id,
             owner_id=owner_id,
             workspace=workspace,
         )
-        key = pending_key.replace("pending", organization_id, 1)
         if self.settings.router_cache_enabled and decision.cacheable:
             cached = self.cache.get(db, key)
             if cached:

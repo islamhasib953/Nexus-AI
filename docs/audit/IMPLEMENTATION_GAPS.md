@@ -11,7 +11,7 @@
 
 **File**: `apps/api/app/routing/smart_router.py:67`  
 **Severity**: CRITICAL  
-**Status**: VERIFIED BUG  
+**Status**: RESOLVED (Phase 1)  
 
 **Description**:  
 The cache key is computed in `prepare()` with `organization_id="pending"` then `complete()` attempts
@@ -44,7 +44,7 @@ key = self.cache.make_key(
 
 **File**: `apps/api/migrations/versions/0009_tenant_scoped_tool_idempotency.py:3`  
 **Severity**: CRITICAL  
-**Status**: VERIFIED BUG  
+**Status**: RESOLVED (Phase 1)  
 
 **Description**: `import sqlalchemy as sa` is present but `sa` is never referenced in the file.
 Ruff correctly flags this as F401. The CI backend job fails at the lint step, preventing
@@ -280,6 +280,7 @@ deterministic fake ticket IDs (`TCK-[A-F0-9]{10}`) — it is a mock, not a real 
 
 **File**: `.env.example:18,40`  
 **Severity**: MEDIUM  
+**Status**: RESOLVED (Phase 1)  
 
 - Line 18: `QDRANT_URL=http://localhost:6333` (intended default)
 - Line 40: `QDRANT_URL=` (empty — overrides the default if file is parsed sequentially)

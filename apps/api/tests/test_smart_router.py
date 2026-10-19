@@ -153,3 +153,49 @@ def test_long_context_is_summarized_within_bound(tmp_path: Path) -> None:
             selected = service.select(session, conversation["id"], "final", True)
         assert selected.mode == "summarized"
         assert len(selected.prompt) <= 1040
+
+
+def test_smart_router_complete_cache_keys_are_tenant_isolated(tmp_path: Path) -> None:
+    settings = Settings(database_url=f"sqlite:///{tmp_path / 'tenant_cache.db'}")
+    app = create_app(settings)
+    with TestClient(app) as client:
+        router = client.app.state.smart_router
+        with client.app.state.database.session_factory() as session:
+            _, _, key_org_a = router.prepare(
+                session,
+                organization_id="org-a",
+                prompt="Tell me a joke",
+                conversation_id="conv-1",
+                owner_id="user-1",
+                workspace="internal",
+            )
+            _, _, key_org_b = router.prepare(
+                session,
+                organization_id="org-b",
+                prompt="Tell me a joke",
+                conversation_id="conv-1",
+                owner_id="user-1",
+                workspace="internal",
+            )
+            assert key_org_a != key_org_b
+            _, _, _, comp_key_a = router.complete(
+                session,
+                organization_id="org-a",
+                owner_id="user-1",
+                workspace="internal",
+                conversation_id="conv-1",
+                run_id="run-1",
+                prompt="Tell me a joke",
+            )
+            _, _, _, comp_key_b = router.complete(
+                session,
+                organization_id="org-b",
+                owner_id="user-1",
+                workspace="internal",
+                conversation_id="conv-1",
+                run_id="run-2",
+                prompt="Tell me a joke",
+            )
+            assert comp_key_a != comp_key_b
+            assert comp_key_a == key_org_a
+            assert comp_key_b == key_org_b

@@ -1,6 +1,5 @@
 """scope tool idempotency keys to the owning organization"""
 
-import sqlalchemy as sa
 from alembic import op
 
 revision = "0009_tenant_scoped_tool_idempotency"

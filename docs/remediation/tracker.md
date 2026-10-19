@@ -25,3 +25,6 @@ This tracker is the source of truth for the remediation program. `IMPLEMENTED` m
 | I-001 | P1 | observability | Add shared telemetry export, alert delivery, and external provider health probes | BLOCKED | AWS/CloudWatch or approved service |
 | J-001 | P1 | deployment | Build and verify containers, migrations, rollback, backup/restore in authorized environment | BLOCKED | Docker/AWS/RDS access |
 | K-001 | P1 | final verification | Run comprehensive regression/security/performance review and publish readiness report | VERIFIED | production external gates remain blocked |
+| P1-001 | P1 | routing/security | Fix cross-tenant cache key leak by passing organization_id directly to make_key() | VERIFIED | none |
+| P1-002 | P1 | CI/validation | Fix Ruff F401 unused sqlalchemy import in migration 0009 unblocking backend CI | VERIFIED | none |
+| P1-003 | P2 | configuration | Remove duplicate QDRANT_URL and stabilize DEV_AUTH_SECRET in .env.example | VERIFIED | none |
