@@ -84,3 +84,9 @@ class ExactResponseCache:
             delete(ResponseCache).where(ResponseCache.source_revision == source_revision)
         )
         return result.rowcount or 0
+
+    def invalidate_tenant(self, db: Session, organization_id: str) -> int:
+        result = db.execute(
+            delete(ResponseCache).where(ResponseCache.organization_id == organization_id)
+        )
+        return result.rowcount or 0

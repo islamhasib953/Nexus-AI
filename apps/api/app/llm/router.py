@@ -9,6 +9,9 @@ from app.llm.models import (
     BudgetExceededError,
     CompletionRequest,
     CompletionResult,
+    ProviderAuthenticationError,
+    ProviderRateLimitError,
+    ProviderTimeoutError,
     ProviderUnavailableError,
     StructuredOutputError,
 )
@@ -71,10 +74,11 @@ class ModelRouter:
         organization_id: str,
         request: CompletionRequest,
         run_id: str | None = None,
+        preferred_model_id: str | None = None,
     ) -> CompletionResult:
         failures: list[str] = []
         structured_error: StructuredOutputError | None = None
-        for model_id in self._candidates():
+        for model_id in self._candidates(preferred_model_id):
             try:
                 model = self.registry.get(model_id)
             except ValueError as error:
@@ -100,7 +104,15 @@ class ModelRouter:
                     self._record_usage(db, organization_id, run_id, result)
                     self.health.success(model.provider)
                     return result
-                except ProviderUnavailableError as error:
+                except ProviderAuthenticationError as error:
+                    self.health.failure(model.provider)
+                    failures.append(str(error))
+                    break
+                except (
+                    ProviderRateLimitError,
+                    ProviderTimeoutError,
+                    ProviderUnavailableError,
+                ) as error:
                     self.health.failure(model.provider)
                     failures.append(str(error))
                     if not self.health.available(model.provider):
@@ -126,38 +138,50 @@ class ModelRouter:
             return "max output tokens must be positive"
         return None
 
-    def _candidates(self) -> tuple[str, ...]:
+    def _candidates(self, preferred_model_id: str | None = None) -> tuple[str, ...]:
         fallbacks = tuple(
             item.strip() for item in self.settings.llm_fallback_model_ids.split(",") if item.strip()
         )
-        return (self.settings.llm_primary_model_id, *fallbacks)
+        base = (self.settings.llm_primary_model_id, *fallbacks)
+        if preferred_model_id:
+            ordered = [preferred_model_id] + [m for m in base if m != preferred_model_id]
+            return tuple(ordered)
+        return base
 
     def _enforce_budget(self, db: Session, organization_id: str, estimated: float) -> None:
+        # Zero budget semantics: 0.0 disables the budget guard (unlimited usage).
+        # Any positive value (> 0.0) strictly enforces the daily budget ceiling.
+        if (
+            self.settings.llm_tenant_daily_budget_usd <= 0.0
+            and self.settings.llm_global_daily_budget_usd <= 0.0
+        ):
+            return
+
         since = datetime.now(UTC) - timedelta(days=1)
-        tenant_total = float(
-            db.scalar(
-                select(func.coalesce(func.sum(ModelUsage.estimated_cost_usd), "0")).where(
-                    ModelUsage.organization_id == organization_id, ModelUsage.created_at >= since
+        if self.settings.llm_tenant_daily_budget_usd > 0.0:
+            tenant_total = float(
+                db.scalar(
+                    select(func.coalesce(func.sum(ModelUsage.estimated_cost_usd), "0")).where(
+                        ModelUsage.organization_id == organization_id,
+                        ModelUsage.created_at >= since,
+                    )
                 )
+                or 0
             )
-            or 0
-        )
-        global_total = float(
-            db.scalar(
-                select(func.coalesce(func.sum(ModelUsage.estimated_cost_usd), "0")).where(
-                    ModelUsage.created_at >= since
+            if tenant_total + estimated > self.settings.llm_tenant_daily_budget_usd:
+                raise BudgetExceededError("Tenant daily model budget has been reached.")
+
+        if self.settings.llm_global_daily_budget_usd > 0.0:
+            global_total = float(
+                db.scalar(
+                    select(func.coalesce(func.sum(ModelUsage.estimated_cost_usd), "0")).where(
+                        ModelUsage.created_at >= since
+                    )
                 )
+                or 0
             )
-            or 0
-        )
-        if self.settings.llm_tenant_daily_budget_usd and (
-            tenant_total + estimated > self.settings.llm_tenant_daily_budget_usd
-        ):
-            raise BudgetExceededError("Tenant daily model budget has been reached.")
-        if self.settings.llm_global_daily_budget_usd and (
-            global_total + estimated > self.settings.llm_global_daily_budget_usd
-        ):
-            raise BudgetExceededError("Global daily model budget has been reached.")
+            if global_total + estimated > self.settings.llm_global_daily_budget_usd:
+                raise BudgetExceededError("Global daily model budget has been reached.")
 
     def _estimate_cost(self, model_id: str, prompt: str, max_output_tokens: int) -> float:
         model = self.registry.get(model_id)

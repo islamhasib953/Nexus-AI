@@ -199,3 +199,77 @@ def test_smart_router_complete_cache_keys_are_tenant_isolated(tmp_path: Path) ->
             assert comp_key_a != comp_key_b
             assert comp_key_a == key_org_a
             assert comp_key_b == key_org_b
+
+
+def test_classifier_detects_arabic_and_reasoning_capabilities() -> None:
+    classifier = RequestClassifier()
+    arabic_decision = classifier.classify("ما هو ملخص الاجتماع؟")
+    assert "arabic" in arabic_decision.required_capabilities
+
+    code_decision = classifier.classify("Write a python function to parse a JSON log")
+    assert "reasoning" in code_decision.required_capabilities
+
+    tool_decision = classifier.classify("Create a support ticket for the bug")
+    assert "tools" in tool_decision.required_capabilities
+
+
+def test_smart_router_selects_model_by_capabilities(tmp_path: Path) -> None:
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'capability_router.db'}",
+        llm_primary_model_id="mock-chat",
+    )
+    app = create_app(settings)
+    with TestClient(app) as client:
+        router = client.app.state.smart_router
+
+        # Arabic prompt matches Arabic model
+        arabic_decision = router.classifier.classify("مرحبا بك في النظام")
+        arabic_model = router.select_model(arabic_decision, "internal")
+        assert arabic_model == "groq-allam-2-7b"
+
+        # Reasoning prompt matches reasoning model
+        code_decision = router.classifier.classify("Write an algorithm to sort elements")
+        code_model = router.select_model(code_decision, "internal")
+        assert code_model == "groq-gpt-oss-120b"
+
+        # Local workspace constraint matches local model
+        direct_decision = router.classifier.classify("Simple question")
+        local_model = router.select_model(direct_decision, "local")
+        assert local_model in {"ollama-qwen3", "mock-chat"}
+
+
+def test_cache_invalidate_tenant_cleans_only_target_tenant(tmp_path: Path) -> None:
+    cache = ExactResponseCache()
+    settings = Settings(database_url=f"sqlite:///{tmp_path / 'tenant_inv.db'}")
+    app = create_app(settings)
+    with TestClient(app) as client:
+        with client.app.state.database.session_factory.begin() as session:
+            cache.put(
+                session,
+                organization_id="tenant-alpha",
+                owner_id="user-1",
+                workspace="internal",
+                cache_key="key-alpha",
+                content="answer alpha",
+                model_id="mock-chat",
+                route_kind="direct_model",
+                ttl_seconds=300,
+            )
+            cache.put(
+                session,
+                organization_id="tenant-beta",
+                owner_id="user-2",
+                workspace="internal",
+                cache_key="key-beta",
+                content="answer beta",
+                model_id="mock-chat",
+                route_kind="direct_model",
+                ttl_seconds=300,
+            )
+            # Invalidate only tenant-alpha
+            deleted = cache.invalidate_tenant(session, "tenant-alpha")
+            assert deleted == 1
+
+            # Alpha is gone, Beta remains intact
+            assert cache.get(session, "key-alpha") is None
+            assert cache.get(session, "key-beta") is not None

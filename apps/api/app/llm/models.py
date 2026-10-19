@@ -10,6 +10,18 @@ class ProviderUnavailableError(ModelGatewayError):
     pass
 
 
+class ProviderAuthenticationError(ModelGatewayError):
+    """The provider rejected credentials (HTTP 401/403)."""
+
+
+class ProviderRateLimitError(ModelGatewayError):
+    """The provider rate limit or quota has been reached (HTTP 429)."""
+
+
+class ProviderTimeoutError(ModelGatewayError):
+    """The provider request timed out."""
+
+
 class BudgetExceededError(ModelGatewayError):
     pass
 
@@ -50,6 +62,9 @@ class CompletionRequest:
     prompt: str
     max_output_tokens: int = 512
     structured_schema: dict[str, Any] | None = None
+    temperature: float = 0.7
+    stop: tuple[str, ...] = ()
+    timeout_seconds: float | None = None
 
 
 @dataclass(frozen=True)
@@ -60,3 +75,5 @@ class CompletionResult:
     model_id: str
     provider: str
     structured: dict[str, Any] | None = None
+    latency_ms: int = 0
+    raw_usage: dict[str, int] | None = None

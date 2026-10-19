@@ -50,7 +50,7 @@ def default_models() -> tuple[ModelSpec, ...]:
             True,
             supports_tools=True,
             requires_api_key=True,
-            capabilities=("chat", "structured_output", "tools"),
+            capabilities=("chat", "structured_output", "tools", "reasoning"),
         ),
         ModelSpec(
             "groq-qwen3.8-27b",
@@ -79,7 +79,7 @@ def default_models() -> tuple[ModelSpec, ...]:
             32768,
             True,
             requires_api_key=True,
-            capabilities=("chat", "structured_output"),
+            capabilities=("chat", "structured_output", "code", "reasoning"),
         ),
         ModelSpec(
             "ollama-qwen3",

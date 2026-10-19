@@ -20,6 +20,49 @@ class SmartRequestRouter:
         self.cache = ExactResponseCache()
         self.context = ContextSelectionService(settings.router_context_max_chars)
 
+    def select_model(self, decision: RouteDecision, workspace: str) -> str:
+        registry = self.model_router.registry
+        primary_id = self.model_router.settings.llm_primary_model_id
+
+        # 1. Local or privacy workspace constraint
+        if workspace == "local":
+            local_models = [
+                m for m in registry.all() if "local" in m.capabilities or m.provider == "mock"
+            ]
+            if local_models:
+                return local_models[0].id
+
+        # 2. Match requested capabilities
+        required = set(decision.required_capabilities)
+        if "arabic" in required:
+            arabic_models = [m for m in registry.all() if "arabic" in m.capabilities]
+            if arabic_models:
+                return arabic_models[0].id
+
+        if "reasoning" in required:
+            reasoning_models = [
+                m
+                for m in registry.all()
+                if "reasoning" in m.capabilities or "complex" in m.capabilities
+            ]
+            if reasoning_models:
+                return reasoning_models[0].id
+
+        if "tools" in required:
+            tool_models = [
+                m for m in registry.all() if m.supports_tools or "tools" in m.capabilities
+            ]
+            if tool_models:
+                try:
+                    primary = registry.get(primary_id)
+                    if primary.supports_tools or "tools" in primary.capabilities:
+                        return primary_id
+                except ValueError:
+                    pass
+                return tool_models[0].id
+
+        return primary_id
+
     def prepare(
         self,
         db: Session,
@@ -34,7 +77,7 @@ class SmartRequestRouter:
         selected = self.context.select(
             db, conversation_id, prompt, decision.use_conversation_context
         )
-        model_id = self.model_router.settings.llm_primary_model_id
+        model_id = self.select_model(decision, workspace)
         key = self.cache.make_key(
             organization_id=organization_id,
             owner_id=owner_id,
@@ -66,6 +109,7 @@ class SmartRequestRouter:
             owner_id=owner_id,
             workspace=workspace,
         )
+        model_id = self.select_model(decision, workspace)
         if self.settings.router_cache_enabled and decision.cacheable:
             cached = self.cache.get(db, key)
             if cached:
@@ -87,6 +131,7 @@ class SmartRequestRouter:
             organization_id,
             CompletionRequest(prompt=selected.prompt),
             run_id,
+            preferred_model_id=model_id,
         )
         if self.settings.router_cache_enabled and decision.cacheable:
             self.cache.put(

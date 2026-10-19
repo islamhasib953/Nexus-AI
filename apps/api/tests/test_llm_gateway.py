@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import httpx
 import pytest
 from app.core.config import Settings
 from app.llm.models import (
@@ -7,6 +8,9 @@ from app.llm.models import (
     CompletionRequest,
     CompletionResult,
     ModelSpec,
+    ProviderAuthenticationError,
+    ProviderRateLimitError,
+    ProviderTimeoutError,
     ProviderUnavailableError,
     StructuredOutputError,
 )
@@ -249,3 +253,112 @@ def test_router_skips_models_that_cannot_fit_context_or_structured_output(tmp_pa
             )
     assert result.model_id == "structured"
     assert result.structured == {"answer": "ok"}
+
+
+def test_provider_typed_errors_authentication_ratelimit_and_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = ModelRegistry((ModelSpec("remote-model", "remote", "model", 1000, True),))
+
+    # Test 401 raises ProviderAuthenticationError
+    def fake_post_401(*args: object, **kwargs: object) -> None:
+        request = httpx.Request("POST", "https://api.test/v1/chat/completions")
+        response = httpx.Response(401, text="Invalid API key", request=request)
+        raise httpx.HTTPStatusError("401 Unauthorized", request=request, response=response)
+
+    monkeypatch.setattr("app.llm.providers.httpx.post", fake_post_401)
+    provider = OpenAICompatibleProvider("remote", "https://api.test/v1", "bad-key", registry, 1.0)
+    with pytest.raises(ProviderAuthenticationError):
+        provider.complete("remote-model", CompletionRequest(prompt="test"))
+
+    # Test 429 raises ProviderRateLimitError
+    def fake_post_429(*args: object, **kwargs: object) -> None:
+        request = httpx.Request("POST", "https://api.test/v1/chat/completions")
+        response = httpx.Response(429, text="Rate limit exceeded", request=request)
+        raise httpx.HTTPStatusError("429 Too Many Requests", request=request, response=response)
+
+    monkeypatch.setattr("app.llm.providers.httpx.post", fake_post_429)
+    with pytest.raises(ProviderRateLimitError):
+        provider.complete("remote-model", CompletionRequest(prompt="test"))
+
+    # Test Timeout raises ProviderTimeoutError
+    def fake_post_timeout(*args: object, **kwargs: object) -> None:
+        raise httpx.ReadTimeout("Request timed out")
+
+    monkeypatch.setattr("app.llm.providers.httpx.post", fake_post_timeout)
+    with pytest.raises(ProviderTimeoutError):
+        provider.complete("remote-model", CompletionRequest(prompt="test"))
+
+
+def test_zero_budget_disables_guard_while_positive_budget_enforces_limit(tmp_path: Path) -> None:
+    registry = ModelRegistry(
+        (ModelSpec("metered", "fixed", "metered", 4096, False, input_cost_per_million_usd=10.0),)
+    )
+
+    # 1. Zero budget (0.0) means disabled -> inference succeeds
+    settings_zero = Settings(
+        database_url=f"sqlite:///{tmp_path / 'zero_budget.db'}",
+        llm_primary_model_id="metered",
+        llm_tenant_daily_budget_usd=0.0,
+        llm_global_daily_budget_usd=0.0,
+    )
+    router_zero = ModelRouter(settings_zero, registry, {"fixed": FixedProvider("zero budget ok")})
+    app_zero = create_app(settings_zero)
+    with TestClient(app_zero) as client:
+        with client.app.state.database.session_factory.begin() as session:
+            result = router_zero.complete(
+                session, "tenant-a", CompletionRequest(prompt="prompt", max_output_tokens=10)
+            )
+            assert result.content == "zero budget ok"
+
+    # 2. Positive budget ceiling -> raises BudgetExceededError when exceeded
+    settings_strict = Settings(
+        database_url=f"sqlite:///{tmp_path / 'strict_budget.db'}",
+        llm_primary_model_id="metered",
+        llm_tenant_daily_budget_usd=0.0000001,
+    )
+    router_strict = ModelRouter(settings_strict, registry, {"fixed": FixedProvider()})
+    app_strict = create_app(settings_strict)
+    with TestClient(app_strict) as client:
+        with client.app.state.database.session_factory.begin() as session:
+            with pytest.raises(BudgetExceededError, match="Tenant daily model budget"):
+                router_strict.complete(
+                    session, "tenant-a", CompletionRequest(prompt="prompt", max_output_tokens=100)
+                )
+
+
+def test_authentication_error_aborts_retries_immediately(tmp_path: Path) -> None:
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'auth_abort.db'}",
+        llm_primary_model_id="bad-auth-model",
+        llm_max_retries=3,
+    )
+    registry = ModelRegistry((ModelSpec("bad-auth-model", "bad_auth", "model", 4096, False),))
+
+    call_count = 0
+
+    class FailingAuthProvider:
+        def complete(self, model_id: str, request: CompletionRequest) -> CompletionResult:
+            nonlocal call_count
+            call_count += 1
+            raise ProviderAuthenticationError("Bad API key")
+
+    router = ModelRouter(settings, registry, {"bad_auth": FailingAuthProvider()})
+    app = create_app(settings)
+    with TestClient(app) as client:
+        with client.app.state.database.session_factory.begin() as session:
+            with pytest.raises(ProviderUnavailableError):
+                router.complete(session, "tenant-a", CompletionRequest(prompt="test"))
+    # Auth error should NOT retry 3 times; it must abort after 1 attempt
+    assert call_count == 1
+
+
+def test_mock_provider_returns_latency_and_raw_usage() -> None:
+    from app.llm.providers import MockProvider
+
+    mock = MockProvider()
+    result = mock.complete("mock-chat", CompletionRequest(prompt="Hello latency"))
+    assert result.latency_ms >= 0
+    assert result.raw_usage is not None
+    assert "prompt_tokens" in result.raw_usage
+    assert "completion_tokens" in result.raw_usage
