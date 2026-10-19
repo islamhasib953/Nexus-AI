@@ -60,7 +60,12 @@ class Settings(BaseSettings):
     dev_auth_secret: str = "development-only-not-for-production"
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(
+            ".env",
+            ".env.local",
+            "../../.env",
+            "../../.env.local",
+        ),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
@@ -68,6 +73,18 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_boundaries(self) -> "Settings":
+        supported_providers = {"mock", "groq", "huggingface", "ollama"}
+        if self.model_provider.lower() not in supported_providers:
+            raise ValueError(
+                f"Unsupported model provider: '{self.model_provider}'. "
+                f"Supported providers: {', '.join(sorted(supported_providers))}."
+            )
+        if self.model_provider.lower() == "groq" and not self.groq_api_key:
+            raise ValueError("GROQ_API_KEY is required when MODEL_PROVIDER is set to 'groq'.")
+        if self.model_provider.lower() == "huggingface" and not self.huggingface_api_key:
+            raise ValueError(
+                "HUGGINGFACE_API_KEY is required when MODEL_PROVIDER is set to 'huggingface'."
+            )
         if self.app_env.lower() == "production":
             if self.dev_auth_enabled:
                 raise ValueError("Development authentication must be disabled in production.")

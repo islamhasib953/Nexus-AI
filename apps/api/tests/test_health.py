@@ -49,3 +49,41 @@ def test_unhandled_error_uses_retryable_error_envelope() -> None:
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "internal_error"
     assert response.json()["error"]["retryable"] is True
+
+
+def test_settings_validates_unsupported_model_provider() -> None:
+    import pytest
+    from app.core.config import Settings
+
+    with pytest.raises(ValueError, match="Unsupported model provider"):
+        Settings(model_provider="unsupported_vendor")
+
+
+def test_settings_requires_groq_api_key_when_groq_selected() -> None:
+    import pytest
+    from app.core.config import Settings
+
+    with pytest.raises(ValueError, match="GROQ_API_KEY is required"):
+        Settings(model_provider="groq", groq_api_key="")
+
+
+def test_settings_accepts_valid_groq_configuration() -> None:
+    from app.core.config import Settings
+    from app.llm.registry import ModelRegistry
+
+    settings = Settings(
+        model_provider="groq",
+        groq_api_key="gsk_valid_mock_key",
+        llm_primary_model_id="groq-llama-3.3-70b",
+    )
+    assert settings.model_provider == "groq"
+    assert settings.groq_api_key == "gsk_valid_mock_key"
+
+    registry = ModelRegistry()
+    llama70b = registry.get("groq-llama-3.3-70b")
+    assert llama70b.provider == "groq"
+    assert llama70b.provider_model == "llama-3.3-70b-versatile"
+
+    llama8b = registry.get("groq-llama-3.1-8b")
+    assert llama8b.provider == "groq"
+    assert llama8b.provider_model == "llama-3.1-8b-instant"
