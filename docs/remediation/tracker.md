@@ -32,3 +32,10 @@ This tracker is the source of truth for the remediation program. `IMPLEMENTED` m
 | P3-002 | P1 | audit/security | Expand audit logging to tool executions, document lifecycle, conversations, and run creation | VERIFIED | none |
 | P3-003 | P1 | testing/security | Implement comprehensive negative security tests for tokens, cross-tenant isolation, role policies, and audit logging | VERIFIED | none |
 | P3-004 | P2 | RAG/reliability | Fix ready_local_index fallback in Document search and listing when vector store is unconfigured | VERIFIED | none |
+| P4-001 | P1 | model gateway | Add typed provider exception contract (ProviderAuthenticationError, ProviderRateLimitError, ProviderTimeoutError) | VERIFIED | none |
+| P4-002 | P1 | routing | Implement capability-aware routing with Arabic/reasoning/tools signal detection and model selection | VERIFIED | none |
+| P4-003 | P1 | model gateway | Formalize zero-budget semantics: 0.0 = unlimited; enforce strictly only when budget > 0.0 | VERIFIED | none |
+| P4-004 | P1 | model gateway | Abort retries immediately on ProviderAuthenticationError (HTTP 401/403); never retry auth failures | VERIFIED | none |
+| P4-005 | P2 | observability | Track end-to-end provider latency (ms) on all adapters (Groq/HF/Ollama/Mock) via perf_counter | VERIFIED | none |
+| P4-006 | P2 | routing/cache | Add invalidate_tenant() API to purge all cached entries for a given organization | VERIFIED | none |
+| P4-007 | P1 | model gateway | Verify live Groq provider: gpt-oss-20b (chat) and allam-2-7b (Arabic) respond correctly end-to-end | VERIFIED | none |
