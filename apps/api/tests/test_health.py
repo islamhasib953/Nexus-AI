@@ -74,16 +74,16 @@ def test_settings_accepts_valid_groq_configuration() -> None:
     settings = Settings(
         model_provider="groq",
         groq_api_key="gsk_valid_mock_key",
-        llm_primary_model_id="groq-llama-3.3-70b",
+        llm_primary_model_id="groq-gpt-oss-20b",
     )
     assert settings.model_provider == "groq"
     assert settings.groq_api_key == "gsk_valid_mock_key"
 
     registry = ModelRegistry()
-    llama70b = registry.get("groq-llama-3.3-70b")
-    assert llama70b.provider == "groq"
-    assert llama70b.provider_model == "llama-3.3-70b-versatile"
+    oss20b = registry.get("groq-gpt-oss-20b")
+    assert oss20b.provider == "groq"
+    assert oss20b.provider_model == "openai/gpt-oss-20b"
 
-    llama8b = registry.get("groq-llama-3.1-8b")
-    assert llama8b.provider == "groq"
-    assert llama8b.provider_model == "llama-3.1-8b-instant"
+    oss120b = registry.get("groq-gpt-oss-120b")
+    assert oss120b.provider == "groq"
+    assert oss120b.provider_model == "openai/gpt-oss-120b"
