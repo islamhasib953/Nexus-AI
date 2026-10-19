@@ -60,46 +60,28 @@ import sqlalchemy as sa  # ← remove this line
 
 ## 2. Security Gaps
 
-### GAP-003: `role` Parameter Ignored in PolicyEngine
+### GAP-003: `role` Parameter Ignored in PolicyEngine [RESOLVED - Phase 3]
 
 **File**: `apps/api/app/security/policy.py`  
 **Severity**: HIGH  
+**Status**: RESOLVED (P3-001)
 
-```python
-def evaluate(self, *, tool_id: str, role: str, workspace: str, mode: str) -> PolicyDecision:
-    # role is NEVER referenced anywhere in this method body
-    if workspace == "customer" and (tool_id.startswith("support.") or ".delete" in tool_id):
-        ...
-```
-
-**Impact**: Admin and anonymous users receive identical risk decisions. Role-based
-execution policy is not enforced at the engine level.
-
-**Fix**: Add role-based checks, e.g.:
-```python
-if role not in {"internal_member", "admin"} and tool_id.startswith("admin."):
-    return PolicyDecision(False, RiskCategory.critical, False, "insufficient_role")
-```
+`PolicyEngine.evaluate()` now checks `role` against authorized roles, denying admin and high-impact tools to unauthorized roles (`external_customer`), and restricts customer workspace execution to approved support actions.
 
 ---
 
-### GAP-004: Audit Log Coverage — Only Approvals Logged
+### GAP-004: Audit Log Coverage — Only Approvals Logged [RESOLVED - Phase 3]
 
 **File**: `apps/api/app/security/audit.py`  
 **Severity**: HIGH  
+**Status**: RESOLVED (P3-002)
 
-`record_audit()` is called only from approval-related code paths:
-- `approval.requested`
-- `approval.approved`
-- `approval.cancelled`
-
-**Missing coverage**:
-- Agent execution start/complete/fail
-- LLM model calls
-- Document access (search results)
-- Tool execution (non-approval path)
-- Conversation/run creation
-- Authentication events
+`record_audit()` calls expanded across critical resource mutations:
+- `tool.execute` (success, denied, invalid)
+- `document.ingest` and `document.delete` (success, not_found)
+- `conversation.created`
+- `run.created`
+- Approvals (`approval.requested`, `approval.approved`, `approval.cancelled`)
 
 ---
 

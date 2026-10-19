@@ -133,3 +133,142 @@ def test_oidc_authenticator_validates_jwks_claims_and_unknown_keys() -> None:
         unknown_key = jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": "unknown"})
         with pytest.raises(AuthenticationError, match="unknown"):
             authenticator.verify(unknown_key)
+
+        # Missing tenant claim
+        missing_org = jwt.encode(
+            {k: v for k, v in claims.items() if k != "org"},
+            private_key,
+            algorithm="RS256",
+            headers={"kid": "key-1"},
+        )
+        with pytest.raises(AuthenticationError, match="missing required tenant claims"):
+            authenticator.verify(missing_org)
+
+
+def test_missing_and_tampered_bearer_token_denied(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        # Missing token
+        no_auth = client.get("/api/v1/me")
+        assert no_auth.status_code == 401
+        assert "Authentication is required" in no_auth.json()["error"]["message"]
+
+        # Tampered / invalid token
+        bad_token = client.get("/api/v1/me", headers={"Authorization": "Bearer not-a-valid-token"})
+        assert bad_token.status_code == 401
+        assert "Invalid or expired" in bad_token.json()["error"]["message"]
+
+
+def test_tenant_isolation_cross_tenant_access_denied(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        from app.core.auth import Principal, issue_token
+
+        settings = client.app.state.settings
+        token_tenant_a = issue_token(
+            Principal("user-a", "org-alpha", "internal_member", "internal"), settings
+        )
+        token_tenant_b = issue_token(
+            Principal("user-b", "org-beta", "internal_member", "internal"), settings
+        )
+        headers_a = {"Authorization": f"Bearer {token_tenant_a}"}
+        headers_b = {"Authorization": f"Bearer {token_tenant_b}"}
+
+        # Tenant A creates a conversation
+        conv_a = client.post(
+            "/api/v1/conversations", headers=headers_a, json={"title": "Secret Org A"}
+        ).json()
+        conv_id = conv_a["id"]
+
+        # Tenant B attempts to read Tenant A's conversation -> 404 (Not Found in tenant scope)
+        read_attempt = client.get(f"/api/v1/conversations/{conv_id}", headers=headers_b)
+        assert read_attempt.status_code == 404
+
+        # Tenant A ingests a knowledge document
+        doc_a = client.post(
+            "/api/v1/knowledge/documents",
+            headers=headers_a,
+            json={"title": "Alpha Confidential", "content": "Restricted knowledge"},
+        ).json()
+        doc_id = doc_a["id"]
+
+        # Tenant B attempts to delete Tenant A's document -> 404
+        delete_attempt = client.delete(f"/api/v1/knowledge/documents/{doc_id}", headers=headers_b)
+        assert delete_attempt.status_code == 404
+
+        # Tenant B searches knowledge -> must NOT see Tenant A's document
+        search_b = client.post(
+            "/api/v1/knowledge/search",
+            headers=headers_b,
+            json={"query": "Confidential", "limit": 5},
+        ).json()
+        assert len(search_b["citations"]) == 0
+
+
+def test_operations_dashboard_denied_to_non_internal(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        customer_headers = auth(client, "customer")
+        internal_headers = auth(client, "internal")
+
+        # Customer role/workspace is forbidden from operations dashboard
+        forbidden = client.get("/api/v1/operations/overview", headers=customer_headers)
+        assert forbidden.status_code == 403
+
+        # Internal member has access
+        allowed = client.get("/api/v1/operations/overview", headers=internal_headers)
+        assert allowed.status_code == 200
+
+
+def test_policy_engine_denies_admin_tool_to_unauthorized_role() -> None:
+    policy = PolicyEngine()
+    # external_customer role denied from admin.*
+    decision = policy.evaluate(
+        tool_id="admin.shutdown_cluster",
+        role="external_customer",
+        workspace="internal",
+        mode="execute",
+    )
+    assert decision.allowed is False
+    assert decision.reason == "insufficient_role"
+
+    # internal_member allowed (requires approval)
+    internal_decision = policy.evaluate(
+        tool_id="admin.shutdown_cluster",
+        role="internal_member",
+        workspace="internal",
+        mode="execute",
+    )
+    assert internal_decision.allowed is True
+    assert internal_decision.requires_approval is True
+
+
+def test_audit_records_tool_and_document_events(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        from app.persistence.models import AuditLog
+        from sqlalchemy import select
+
+        internal = auth(client, "internal")
+
+        # Ingest document
+        client.post(
+            "/api/v1/knowledge/documents",
+            headers=internal,
+            json={"title": "Audit Test Doc", "content": "Audited text"},
+        )
+
+        # Execute tool
+        res = client.post(
+            "/api/v1/tools/execute",
+            headers=internal,
+            json={
+                "tool_id": "support.create_ticket",
+                "arguments": {"title": "Need help", "description": "Details here"},
+                "idempotency_key": "audit-test-key-001",
+                "mode": "draft",
+            },
+        )
+        assert res.status_code == 200
+
+        with client.app.state.database.session_factory() as session:
+            logs = session.scalars(select(AuditLog)).all()
+            actions = {log.action for log in logs}
+            assert "document.ingest" in actions
+            assert "tool.execute" in actions

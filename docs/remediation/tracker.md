@@ -28,3 +28,7 @@ This tracker is the source of truth for the remediation program. `IMPLEMENTED` m
 | P1-001 | P1 | routing/security | Fix cross-tenant cache key leak by passing organization_id directly to make_key() | VERIFIED | none |
 | P1-002 | P1 | CI/validation | Fix Ruff F401 unused sqlalchemy import in migration 0009 unblocking backend CI | VERIFIED | none |
 | P1-003 | P2 | configuration | Remove duplicate QDRANT_URL and stabilize DEV_AUTH_SECRET in .env.example | VERIFIED | none |
+| P3-001 | P1 | authorization/policy | Enforce role-based tool authorization in PolicyEngine (denies admin tools to unauthorized roles) | VERIFIED | none |
+| P3-002 | P1 | audit/security | Expand audit logging to tool executions, document lifecycle, conversations, and run creation | VERIFIED | none |
+| P3-003 | P1 | testing/security | Implement comprehensive negative security tests for tokens, cross-tenant isolation, role policies, and audit logging | VERIFIED | none |
+| P3-004 | P2 | RAG/reliability | Fix ready_local_index fallback in Document search and listing when vector store is unconfigured | VERIFIED | none |

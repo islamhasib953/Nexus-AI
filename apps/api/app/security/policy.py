@@ -20,8 +20,14 @@ class PolicyDecision:
 
 class PolicyEngine:
     def evaluate(self, *, tool_id: str, role: str, workspace: str, mode: str) -> PolicyDecision:
-        if workspace == "customer" and (tool_id.startswith("support.") or ".delete" in tool_id):
-            return PolicyDecision(False, RiskCategory.high, True, "customer_actions_are_restricted")
+        if workspace == "customer":
+            if tool_id.startswith("support.") or ".delete" in tool_id:
+                return PolicyDecision(
+                    False, RiskCategory.high, True, "customer_actions_are_restricted"
+                )
+            return PolicyDecision(False, RiskCategory.critical, False, "insufficient_role")
+        if role not in {"internal_member", "admin"}:
+            return PolicyDecision(False, RiskCategory.critical, False, "insufficient_role")
         if ".delete" in tool_id or tool_id.startswith("admin."):
             return PolicyDecision(True, RiskCategory.critical, True, "high_impact_action")
         if mode == "execute" and tool_id.startswith("support."):

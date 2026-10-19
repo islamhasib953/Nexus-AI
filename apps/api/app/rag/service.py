@@ -135,7 +135,7 @@ class DocumentService:
                 Document.organization_id == organization_id,
                 Document.workspace == workspace,
                 Document.deleted_at.is_(None),
-                Document.status == "ready",
+                Document.status.in_(["ready", "ready_local_index"]),
             )
             .order_by(DocumentChunk.created_at.desc())
         ).all()

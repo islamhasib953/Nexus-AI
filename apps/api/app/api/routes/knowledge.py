@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, require_principal
 from app.persistence.models import Document
 from app.rag.service import DocumentService
+from app.security.audit import record_audit
 
 router = APIRouter(prefix="/api/v1/knowledge", tags=["knowledge"])
 
@@ -51,6 +52,15 @@ def ingest_document(
         source_type=body.source_type,
         metadata_value=body.metadata,
     )
+    record_audit(
+        db,
+        principal,
+        action="document.ingest",
+        resource_type="document",
+        resource_id=document.id,
+        outcome="success",
+        details={"title": document.title},
+    )
     db.commit()
     return {
         "id": document.id,
@@ -71,7 +81,7 @@ def list_documents(
             Document.organization_id == principal.organization_id,
             Document.workspace == principal.workspace,
             Document.deleted_at.is_(None),
-            Document.status == "ready",
+            Document.status.in_(["ready", "ready_local_index"]),
         )
         .order_by(Document.updated_at.desc())
     ).all()
@@ -115,5 +125,22 @@ def delete_document(
     db: Session = Depends(get_db),
 ):
     if not service.delete(db, document_id=document_id, organization_id=principal.organization_id):
+        record_audit(
+            db,
+            principal,
+            action="document.delete",
+            resource_type="document",
+            resource_id=document_id,
+            outcome="not_found",
+        )
+        db.commit()
         raise HTTPException(status_code=404, detail="Document not found.")
+    record_audit(
+        db,
+        principal,
+        action="document.delete",
+        resource_type="document",
+        resource_id=document_id,
+        outcome="success",
+    )
     db.commit()

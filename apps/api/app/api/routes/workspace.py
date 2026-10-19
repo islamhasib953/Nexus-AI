@@ -19,6 +19,7 @@ from app.persistence.checkpoints import PostgresCheckpointStore
 from app.persistence.database import Database
 from app.persistence.models import AgentExecutionMetric, Conversation, Message, Run, RunEvent
 from app.persistence.runs import transition_run
+from app.security.audit import record_audit
 
 router = APIRouter(prefix="/api/v1", tags=["workspace"])
 checkpoint_store = PostgresCheckpointStore()
@@ -207,6 +208,16 @@ def create_conversation(
         title=body.title,
     )
     db.add(conversation)
+    db.flush()
+    record_audit(
+        db,
+        principal,
+        action="conversation.created",
+        resource_type="conversation",
+        resource_id=conversation.id,
+        outcome="success",
+        details={"title": conversation.title, "workspace": conversation.workspace},
+    )
     db.commit()
     db.refresh(conversation)
     return conversation_payload(conversation)
@@ -257,6 +268,15 @@ def create_run(
         Message(conversation_id=conversation.id, run_id=run.id, role="user", content=body.content)
     )
     add_event(db, run, "run_started", {"status": "queued"})
+    record_audit(
+        db,
+        principal,
+        action="run.created",
+        resource_type="run",
+        resource_id=run.id,
+        outcome="success",
+        details={"conversation_id": conversation.id},
+    )
     db.commit()
     db.refresh(run)
     return run_payload(run)
